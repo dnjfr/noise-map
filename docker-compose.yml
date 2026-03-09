@@ -1,0 +1,134 @@
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    hostname: zookeeper
+    container_name: zookeeper
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    volumes:
+      - zookeeper-data:/var/lib/zookeeper/data
+      - zookeeper-logs:/var/lib/zookeeper/log
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    hostname: kafka
+    container_name: kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+      - "9101:9101"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "kafka:29092"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  timescaledb:
+    image: timescale/timescaledb:latest-pg15
+    container_name: timescaledb
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: $POSTGRES_DB
+      POSTGRES_USER: $POSTGRES_USER
+      POSTGRES_PASSWORD: $POSTGRES_PASSWORD
+    volumes:
+      - ./data/timescaledb:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+
+  pgadmin_timescale:
+    container_name: pgadmin
+    image: dpage/pgadmin4
+    environment:
+      PGADMIN_DEFAULT_EMAIL: $PGADMIN_DEFAULT_EMAIL
+      PGADMIN_DEFAULT_PASSWORD: $PGADMIN_DEFAULT_PASSWORD
+    ports:
+      - "5050:80"
+
+  # Producer Python qui récupère les données adsb.one et les envoie à Kafka
+  aircraft-producer:
+    build:
+      context: ./producer
+      dockerfile: Dockerfile
+    container_name: aircraft-producer
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      ROTATION_DELAY: 3
+    restart: unless-stopped
+
+  # Consumer qui traite les données et calcule le bruit
+  noise-processor:
+    build:
+      context: ./processor
+      dockerfile: Dockerfile
+    container_name: noise-processor
+    depends_on:
+      kafka:
+        condition: service_healthy
+      timescaledb:
+        condition: service_started
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      TIMESCALE_HOST: $TIMESCALE_HOST
+      TIMESCALE_PORT: $TIMESCALE_PORT
+      TIMESCALE_NAME: $TIMESCALE_NAME
+      TIMESCALE_USER: $TIMESCALE_USER
+      TIMESCALE_PASSWORD: $TIMESCALE_PASSWORD
+    restart: unless-stopped
+
+  # API FastAPI pour exposer les données
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: noise-api
+    depends_on:
+      - timescaledb
+    ports:
+      - "8000:8000"
+    environment:
+      TIMESCALE_HOST: $TIMESCALE_HOST
+      TIMESCALE_PORT: $TIMESCALE_PORT
+      TIMESCALE_NAME: $TIMESCALE_NAME
+      TIMESCALE_USER: $TIMESCALE_USER
+      TIMESCALE_PASSWORD: $TIMESCALE_PASSWORD
+    restart: unless-stopped
+
+  # Frontend pour visualiser la carte
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_MAPTILER_API: $MAPTILER_API
+    container_name: noise-frontend
+    depends_on:
+      - api
+    ports:
+      - "3000:80"
+    restart: unless-stopped
+
+volumes:
+  zookeeper-data:
+  zookeeper-logs:
+  kafka-data:

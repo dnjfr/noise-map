@@ -1,0 +1,19 @@
+@import "tailwindcss";
+
+.maplibregl-popup-content {
+  position: relative;
+  background: #1e293b !important;
+  color: #e2e8f0 !important;
+  border-radius: 8px;
+  padding: 10px 14px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+}
+.maplibregl-popup-tip {
+  border-top-color: #1e293b !important;
+}
+.maplibregl-popup-close-button {
+  color: #94a3b8 !important;
+  right: 10px !important;
+  left: auto !important;
+  top: 6px !important;
+}
