@@ -1,7 +1,7 @@
 import React from 'react'
 
 const items = [
-  { color: '#22c55e', label: 'Négligeable (51–60 dB)' },
+  { color: '#759285', label: 'Négligeable (51–60 dB)' },
   { color: '#eab308', label: 'Perceptible (> 60 dB)' },
   { color: '#f97316', label: 'Gênant (≥ 70 dB)' },
   { color: '#ef4444', label: 'Dangereux (≥ 80 dB)' },

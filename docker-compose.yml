@@ -8,6 +8,7 @@ services:
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
+      KAFKA_HEAP_OPTS: "-Xmx256M -Xms256M"
     volumes:
       - zookeeper-data:/var/lib/zookeeper/data
       - zookeeper-logs:/var/lib/zookeeper/log
@@ -31,6 +32,7 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+      KAFKA_HEAP_OPTS: "-Xmx256M -Xms256M"
     volumes:
       - kafka-data:/var/lib/kafka/data
     healthcheck:
@@ -41,7 +43,7 @@ services:
       start_period: 30s
 
   timescaledb:
-    image: timescale/timescaledb:latest-pg15
+    image: timescale/timescaledb:2.25.2-pg15-oss
     container_name: timescaledb
     ports:
       - "5432:5432"
@@ -53,19 +55,19 @@ services:
       - ./data/timescaledb:/var/lib/postgresql/data
       - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
 
-  pgadmin_timescale:
-    container_name: pgadmin
-    image: dpage/pgadmin4
-    environment:
-      PGADMIN_DEFAULT_EMAIL: $PGADMIN_DEFAULT_EMAIL
-      PGADMIN_DEFAULT_PASSWORD: $PGADMIN_DEFAULT_PASSWORD
-    ports:
-      - "5050:80"
+  # pgadmin:
+  #   container_name: pgadmin
+  #   image: dpage/pgadmin4
+  #   environment:
+  #     PGADMIN_DEFAULT_EMAIL: $PGADMIN_DEFAULT_EMAIL
+  #     PGADMIN_DEFAULT_PASSWORD: $PGADMIN_DEFAULT_PASSWORD
+  #   ports:
+  #     - "5050:80"
 
   # Producer Python qui récupère les données adsb.one et les envoie à Kafka
   aircraft-producer:
     build:
-      context: ./producer
+      context: ./producers/aircraft-producer
       dockerfile: Dockerfile
     container_name: aircraft-producer
     depends_on:
@@ -77,11 +79,11 @@ services:
     restart: unless-stopped
 
   # Consumer qui traite les données et calcule le bruit
-  noise-processor:
+  aircraft-processor:
     build:
-      context: ./processor
+      context: ./processors/aircraft-processor
       dockerfile: Dockerfile
-    container_name: noise-processor
+    container_name: aircraft-processor
     depends_on:
       kafka:
         condition: service_healthy
@@ -126,6 +128,85 @@ services:
       - api
     ports:
       - "3000:80"
+    restart: unless-stopped
+
+  road-producer:
+    build:
+      context: ./producers/road-producer
+      dockerfile: Dockerfile
+    container_name: road-producer
+    depends_on:
+      kafka:
+        condition: service_healthy
+      timescaledb:
+        condition: service_started
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      DB_HOST: $TIMESCALE_HOST
+      DB_PORT: $TIMESCALE_PORT
+      DB_NAME: $TIMESCALE_NAME
+      DB_USER: $TIMESCALE_USER
+      DB_PASSWORD: $TIMESCALE_PASSWORD
+      TOMTOM_API_KEY: ${TOMTOM_API_KEY}
+    restart: unless-stopped
+
+  road-processor:
+    build:
+      context: ./processors/road-processor
+      dockerfile: Dockerfile
+    container_name: road-processor
+    depends_on:
+      kafka:
+        condition: service_healthy
+      timescaledb:
+        condition: service_started
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      DB_HOST: $TIMESCALE_HOST
+      DB_PORT: $TIMESCALE_PORT
+      DB_NAME: $TIMESCALE_NAME
+      DB_USER: $TIMESCALE_USER
+      DB_PASSWORD: $TIMESCALE_PASSWORD
+    restart: unless-stopped
+
+  railway-producer:
+    build:
+      context: ./producers/railway-producer
+      dockerfile: Dockerfile
+    container_name: railway-producer
+    depends_on:
+      kafka:
+        condition: service_healthy
+      timescaledb:
+        condition: service_started
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      DB_HOST: $TIMESCALE_HOST
+      DB_PORT: $TIMESCALE_PORT
+      DB_NAME: $TIMESCALE_NAME
+      DB_USER: $TIMESCALE_USER
+      DB_PASSWORD: $TIMESCALE_PASSWORD
+    restart: unless-stopped
+
+  railway-processor:
+    build:
+      context: ./processors/railway-processor
+      dockerfile: Dockerfile
+    container_name: railway-processor
+    depends_on:
+      kafka:
+        condition: service_healthy
+      timescaledb:
+        condition: service_started
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      DB_HOST: $TIMESCALE_HOST
+      DB_PORT: $TIMESCALE_PORT
+      DB_NAME: $TIMESCALE_NAME
+      DB_USER: $TIMESCALE_USER
+      DB_PASSWORD: $TIMESCALE_PASSWORD
+    mem_limit: 128m
+    memswap_limit: 128m
     restart: unless-stopped
 
 volumes:

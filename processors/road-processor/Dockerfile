@@ -5,6 +5,6 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY producer.py .
+COPY road-processor.py .
 
-CMD ["python", "-u", "producer.py"]
+CMD ["python", "-u", "road-processor.py"]

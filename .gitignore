@@ -1,8 +1,13 @@
 CLAUDE.md
 .env
+.venv
 frontend/node_modules/
 frontend/dist/
 MAdB*
 2023-03-24*
 data/
 *.bak
+archives
+osmnx_cache
+*.json
+__pycache__

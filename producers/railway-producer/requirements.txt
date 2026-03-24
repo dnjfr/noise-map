@@ -1,0 +1,6 @@
+kafka-python
+requests
+python-dotenv
+gtfs-realtime-bindings
+sqlalchemy
+psycopg[binary]

@@ -1,0 +1,9 @@
+kafka-python
+requests
+python-dotenv
+lxml
+pyproj
+sqlalchemy
+psycopg[binary]
+osmnx>=1.8.0
+mapbox-vector-tile
