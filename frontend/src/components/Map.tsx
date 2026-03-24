@@ -1,337 +1,148 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Map as MapGL, Marker, Popup } from 'react-map-gl/maplibre'
+import { Map as MapGL, Source, Layer } from 'react-map-gl/maplibre'
 import type { MapRef } from 'react-map-gl/maplibre'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import type { Aircraft } from '../hooks/useNoiseData'
+import type { RoadSegment } from '../hooks/useRoadData'
+import type { Train } from '../hooks/useRailwayData'
+import { ANIMATION_DURATION, EARTH_RADIUS, FRAME_INTERVAL } from '../features/aircraft/constants'
+import { TRAIN_SLIDE_DURATION } from '../features/railway/constants'
+import type { AnimData } from '../features/aircraft/constants'
+import type { TrainAnimData } from '../features/railway/constants'
+import { projectOnPolyline, posAtDist, headingAtDist } from '../features/railway/polyline'
+import { drawHalos } from '../features/aircraft/rendering'
+import { drawRailwayHalos } from '../features/railway/rendering'
+import AircraftMarker from '../features/aircraft/AircraftMarker'
+import { railwayLineLayer } from '../features/railway/maplibre-layers'
+import TrainMarker from '../features/railway/TrainMarker'
+import { roadHaloOuter, roadHaloMid, roadHaloInner, roadCoreLayer } from '../features/road/maplibre-layers'
+import { getRoadGeoJSON } from '../features/road/utils'
 
 interface Props {
-  noiseData: unknown[]
   aircraftData: Aircraft[]
+  roadData: RoadSegment[]
+  railwayData: Train[]
+  railwayShapes: Map<string, [number, number, number][]>
+  showAircraft: boolean
+  showRoads: boolean
+  showRailways: boolean
 }
 
 const MAPTILER_KEY = import.meta.env.VITE_MAPTILER_API
-const MAP_STYLE = `https://api.maptiler.com/maps/019cbf29-a831-7ff4-b316-7788daaa3cf8/style.json?key=${MAPTILER_KEY}`
-
-const NOISE_REFERENCE_DB_BY_CATEGORY: Record<string, number> = {
-  A1: 65, A2: 72, A3: 80, A4: 82, A5: 85,
-}
+// Map dark-matter
+// const MAP_STYLE = `https://api.maptiler.com/maps/019cbf29-a831-7ff4-b316-7788daaa3cf8/style.json?key=${MAPTILER_KEY}`
+// Map winter
+// const MAP_STYLE = `https://api.maptiler.com/maps/winter-v4/style.json?key=${MAPTILER_KEY}`
+// Map winter custom
+const MAP_STYLE = `https://api.maptiler.com/maps/019ce31a-bd4b-7f1b-973a-96f15b8cc90c/style.json?key=${MAPTILER_KEY}`
 
 const MIN_ZOOM = 6
-const MAX_ZOOM = 13
-const ICON_MIN = 6
-const MAX_SIZE_BY_CATEGORY: Record<string, number> = {
-  A1: 13, A2: 16, A3: 19, A4: 22, A5: 25,
-}
-const DEFAULT_MAX_SIZE = 17
+const MAX_ZOOM = 14
 const LAT_REF = 46.6
-
-const DB_LEVEL_COLOR_STOPS: Array<[number, string]> = [
-  [51, '#22c55e'],
-  [60, '#eab308'],
-  [70, '#f97316'],
-  [80, '#dc2626'],
-]
-
-/**
- * Retourne le niveau de bruit de référence Lref en dB(A) pour une catégorie d'avion ICAO.
- * @param category - Catégorie ICAO (A1 à A5) ou null
- * @returns Niveau de bruit de référence en dB(A). Fallback 80 dB si catégorie inconnue
- */
-function getNoiseReferenceDb(category: string | null): number {
-  return category ? (NOISE_REFERENCE_DB_BY_CATEGORY[category] ?? 80) : 80
-}
-
-/**
- * Calcule le niveau de bruit perçu au sol (dB(A)) depuis un avion à une altitude donnée.
- * @param noiseReferenceDb - Niveau de bruit de référence Lref en dB(A)
- * @param altitudeMeters - Altitude de l'avion en mètres
- * @returns Niveau de bruit au sol en dB(A). Formule : atténuation -20*log10(alt/300). Minimum 50m d'altitude
- */
-function calcGroundNoise(noiseReferenceDb: number, altitudeMeters: number): number {
-  if (altitudeMeters <= 0) return noiseReferenceDb
-  return noiseReferenceDb - 20 * Math.log10(Math.max(altitudeMeters, 50) / 300)
-}
-
-/**
- * Calcule le rayon horizontal en mètres à partir duquel le bruit descend sous un seuil donné.
- * @param noiseReferenceDb - Niveau de bruit de référence Lref en dB(A)
- * @param thresholdDb - Seuil de bruit en dB(A)
- * @param altitudeMeters - Altitude de l'avion en mètres
- * @returns Rayon horizontal en mètres, ou null si l'altitude est supérieure à la distance slant maximale
- */
-function calcNoiseRadius(noiseReferenceDb: number, thresholdDb: number, altitudeMeters: number): number | null {
-  const slant = 300 * Math.pow(10, (noiseReferenceDb - thresholdDb) / 20)
-  if (altitudeMeters >= slant) return null
-  return Math.sqrt(slant * slant - altitudeMeters * altitudeMeters)
-}
-
-/**
- * Convertit une couleur hexadécimale en tuple RGB.
- * @param hex - Couleur en format hexadécimal (#RRGGBB)
- * @returns Tuple [R, G, B] avec valeurs 0-255
- */
-function hexToRgb(hex: string): [number, number, number] {
-  const hexValue = parseInt(hex.slice(1), 16)
-  return [(hexValue >> 16) & 255, (hexValue >> 8) & 255, hexValue & 255]
-}
-
-/**
- * Interpole une couleur CSS entre les stops de DB_LEVEL_COLOR_STOPS en fonction du niveau de bruit.
- * @param dbLevel - Niveau de bruit en dB(A)
- * @returns Couleur au format hexadécimal (#RRGGBB)
- */
-function interpolateColor(dbLevel: number): string {
-  const stops = DB_LEVEL_COLOR_STOPS
-  if (dbLevel <= stops[0][0]) return stops[0][1]
-  if (dbLevel >= stops[stops.length - 1][0]) return stops[stops.length - 1][1]
-  for (let i = 0; i < stops.length - 1; i++) {
-    const [dbLevel0, hexColor0] = stops[i]
-    const [dbLevel1, hexColor1] = stops[i + 1]
-    if (dbLevel >= dbLevel0 && dbLevel <= dbLevel1) {
-      const interpolationFactor = (dbLevel - dbLevel0) / (dbLevel1 - dbLevel0)
-      const [red0, green0, blue0] = hexToRgb(hexColor0)
-      const [red1, green1, blue1] = hexToRgb(hexColor1)
-      const red = Math.round(red0 + interpolationFactor * (red1 - red0))
-      const green = Math.round(green0 + interpolationFactor * (green1 - green0))
-      const blue = Math.round(blue0 + interpolationFactor * (blue1 - blue0))
-      return `#${[red, green, blue].map(v => v.toString(16).padStart(2, '0')).join('')}`
-    }
-  }
-  return stops[stops.length - 1][1]
-}
-
-/**
- * Dessine sur un canvas 2D les halos de bruit radial pour chaque avion.
- * @param canvasContext - Contexte canvas 2D pour le dessin
- * @param aircraftList - Liste des avions à afficher
- * @param posMap - Map des positions actuelles (icao24 -> [lat, lng])
- * @param map - Référence à la carte MapGL pour la projection
- * @param zoom - Niveau de zoom courant
- */
-function drawHalos(
-  canvasContext: CanvasRenderingContext2D,
-  aircraftList: Aircraft[],
-  posMap: Map<string, [number, number]>,
-  map: MapRef,
-  zoom: number,
-) {
-  const pixelRatio = window.devicePixelRatio || 1
-  const canvas = canvasContext.canvas
-  // Auto-resize : synchronise le buffer avec la taille CSS réelle
-  const canvasCssWidth = canvas.offsetWidth
-  const canvasCssHeight = canvas.offsetHeight
-  if (canvasCssWidth > 0 && canvasCssHeight > 0 && (canvas.width !== canvasCssWidth * pixelRatio || canvas.height !== canvasCssHeight * pixelRatio)) {
-    canvas.width = canvasCssWidth * pixelRatio
-    canvas.height = canvasCssHeight * pixelRatio
-  }
-  canvasContext.clearRect(0, 0, canvas.width, canvas.height)
-  canvasContext.save()
-  canvasContext.scale(pixelRatio, pixelRatio)
-
-  const metersPerPixel = 156543.03 * Math.cos(LAT_REF * Math.PI / 180) / Math.pow(2, zoom)
-
-  for (const aircraft of aircraftList) {
-    const pos = posMap.get(aircraft.icao24)
-    if (!pos) continue
-    const [lat, lng] = pos
-    if (!aircraft.velocity || aircraft.velocity === 0) continue
-
-    const noiseReferenceDb = getNoiseReferenceDb(aircraft.aircraft_category)
-    const altitudeMeters = aircraft.altitude ?? 1000
-    const groundNoise = calcGroundNoise(noiseReferenceDb, altitudeMeters)
-    if (groundNoise <= DB_LEVEL_COLOR_STOPS[0][0]) continue
-
-    const point = map.project([lng, lat])
-    const pointX = point.x
-    const pointY = point.y
-
-    // Rayon extérieur (51 dB, minimum 500m)
-    let outerRadiusMeters = calcNoiseRadius(noiseReferenceDb, DB_LEVEL_COLOR_STOPS[0][0], altitudeMeters)
-    outerRadiusMeters = outerRadiusMeters !== null ? Math.max(outerRadiusMeters, 500) : 500
-    const outerRadiusPixels = outerRadiusMeters / metersPerPixel
-
-    // Rayon intérieur (80 dB) — 0 si l'avion est trop haut
-    const innerRadiusMeters = calcNoiseRadius(noiseReferenceDb, DB_LEVEL_COLOR_STOPS[DB_LEVEL_COLOR_STOPS.length - 1][0], altitudeMeters) ?? 0
-    const innerRadiusPixels = Math.max(0, innerRadiusMeters / metersPerPixel)
-
-    if (outerRadiusPixels < 2) continue
-
-    const radialGradient = canvasContext.createRadialGradient(pointX, pointY, innerRadiusPixels, pointX, pointY, outerRadiusPixels)
-
-    // t=0 → centre (couleur basée sur le groundNoise réel), t=1 → bord transparent
-    const centerColor = interpolateColor(Math.min(groundNoise, DB_LEVEL_COLOR_STOPS[DB_LEVEL_COLOR_STOPS.length - 1][0]))
-    const [centerRed, centerGreen, centerBlue] = hexToRgb(centerColor)
-    radialGradient.addColorStop(0, `rgba(${centerRed},${centerGreen},${centerBlue},0.55)`)
-
-    // Stops intermédiaires (70 dB et 60 dB) positionnés proportionnellement
-    for (let i = DB_LEVEL_COLOR_STOPS.length - 2; i >= 1; i--) {
-      const [thresholdDb, stopHexColor] = DB_LEVEL_COLOR_STOPS[i]
-      const radiusMeters = calcNoiseRadius(noiseReferenceDb, thresholdDb, altitudeMeters)
-      if (radiusMeters === null) continue
-      const gradientStopPosition = (radiusMeters / metersPerPixel - innerRadiusPixels) / (outerRadiusPixels - innerRadiusPixels)
-      if (gradientStopPosition <= 0 || gradientStopPosition >= 1) continue
-      const [stopRed, stopGreen, stopBlue] = hexToRgb(stopHexColor)
-      radialGradient.addColorStop(gradientStopPosition, `rgba(${stopRed},${stopGreen},${stopBlue},0.4)`)
-    }
-
-    // Bord extérieur transparent
-    const [edgeRed, edgeGreen, edgeBlue] = hexToRgb(DB_LEVEL_COLOR_STOPS[0][1])
-    radialGradient.addColorStop(1, `rgba(${edgeRed},${edgeGreen},${edgeBlue},0)`)
-
-    canvasContext.fillStyle = radialGradient
-    canvasContext.beginPath()
-    canvasContext.arc(pointX, pointY, outerRadiusPixels, 0, 2 * Math.PI)
-    canvasContext.fill()
-  }
-
-  canvasContext.restore()
-}
-
-/**
- * Génère le contenu HTML d'une popup d'info pour un avion.
- * @param aircraft - Données de l'avion (callsign, altitude, vitesse, ICAO, catégorie)
- * @returns String HTML contenant callsign, altitude, vitesse, bruit estimé, ICAO
- */
-function buildPopupContent(aircraft: Aircraft): string {
-  const noiseReferenceDb = getNoiseReferenceDb(aircraft.aircraft_category)
-  const altitudeMeters = aircraft.altitude
-  const groundNoise = altitudeMeters && altitudeMeters > 0 ? calcGroundNoise(noiseReferenceDb, altitudeMeters).toFixed(0) : null
-  return `
-    <strong>${aircraft.callsign || aircraft.icao24}</strong><br />
-    ${aircraft.aircraft_desc ? `<em style="color:#aaa">${aircraft.aircraft_desc}</em><br />` : ''}
-    <strong>Altitude :</strong> ${altitudeMeters ? (altitudeMeters / 1000).toFixed(1) : 'N/A'} km<br />
-    <strong>Vitesse :</strong> ${aircraft.velocity ? (aircraft.velocity * 3.6).toFixed(0) : 'N/A'} km/h<br />
-    ${groundNoise ? `<strong>Bruit estimé :</strong> ${groundNoise} dB<br />` : ''}
-    <strong>ICAO24 :</strong> ${aircraft.icao24}
-  `
-}
-
-/**
- * Génère un SVG inline représentant la silhouette d'un avion.
- * @param size - Taille du SVG en pixels (width et height)
- * @returns String SVG de la silhouette d'avion
- */
-function getAircraftSvg(size: number): string {
-  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24">
-  <rect x="10.5" y="2" width="3" height="16" rx="1.5" fill="#60a5fa"/>
-  <polygon points="12,8 3,14 21,14" fill="#60a5fa"/>
-  <polygon points="12,18 8,22 16,22" fill="#60a5fa"/>
-</svg>`
-}
-
-const ANIMATION_DURATION = 3200
-const EARTH_RADIUS = 6371000
-const FRAME_INTERVAL = 1000 / 30
-
-// Données d'animation par avion (purement ref, pas de state)
-interface AnimData {
-  fromLat: number; fromLng: number
-  toLat: number; toLng: number
-  startTime: number
-}
-
-// --- Composant marker memoized, défini hors de NoiseMap pour éviter les recréations ---
-
-interface AircraftMarkerProps {
-  icao: string
-  lat: number
-  lng: number
-  aircraft: Aircraft
-  zoomFactor: number
-  isOpen: boolean
-  onClick: (icao: string) => void
-  onClose: () => void
-}
-
-/**
- * Affiche le marker d'un avion sur la carte avec rotation selon son cap.
- * Mémoïsé pour éviter les re-renders inutiles.
- * @param icao - Identifiant ICAO24 de l'avion
- * @param lat - Latitude du marker
- * @param lng - Longitude du marker
- * @param aircraft - Données de l'avion (heading, catégorie, etc.)
- * @param zoomFactor - Facteur de zoom pour adapter la taille du marker
- * @param isOpen - Indique si la popup d'info est ouverte
- * @param onClick - Callback au clic sur le marker
- * @param onClose - Callback à la fermeture de la popup
- */
-const AircraftMarker = React.memo(function AircraftMarker({
-  icao, lat, lng, aircraft, zoomFactor, isOpen, onClick, onClose,
-}: AircraftMarkerProps) {
-  const pixelSize = useMemo(() => {
-    const maxSize = MAX_SIZE_BY_CATEGORY[aircraft.aircraft_category ?? ''] ?? DEFAULT_MAX_SIZE
-    return Math.round(ICON_MIN + zoomFactor * (maxSize - ICON_MIN))
-  }, [aircraft.aircraft_category, zoomFactor])
-
-  const svgHtml = useMemo(() => ({ __html: getAircraftSvg(pixelSize) }), [pixelSize])
-
-  const style = useMemo(() => ({
-    transform: `rotate(${aircraft.heading ?? 0}deg)`,
-    cursor: 'pointer' as const,
-    width: pixelSize,
-    height: pixelSize,
-  }), [aircraft.heading, pixelSize])
-
-  const handleClick = useCallback((e: { originalEvent: { stopPropagation(): void } }) => {
-    e.originalEvent.stopPropagation()
-    onClick(icao)
-  }, [icao, onClick])
-
-  return (
-    <>
-      <Marker latitude={lat} longitude={lng} anchor="center" onClick={handleClick}>
-        <div style={style} dangerouslySetInnerHTML={svgHtml} />
-      </Marker>
-      {isOpen && (
-        <Popup
-          latitude={lat}
-          longitude={lng}
-          anchor="bottom"
-          closeButton={true}
-          closeOnClick={false}
-          onClose={onClose}
-        >
-          <div
-            style={{ fontSize: 13, lineHeight: 1.6 }}
-            dangerouslySetInnerHTML={{ __html: buildPopupContent(aircraft) }}
-          />
-        </Popup>
-      )}
-    </>
-  )
-})
 
 /**
  * Composant principal de la carte. Gère la boucle RAF d'animation des positions, le canvas des halos, et la synchronisation des avions.
  * @param aircraftData - Liste des avions à afficher sur la carte
  * @returns Composant React avec carte interactive et halos de bruit
  */
-export default React.memo(function NoiseMap({ aircraftData }: Props) {
+export default React.memo(function NoiseMap({ aircraftData, roadData, railwayData, railwayShapes, showAircraft, showRoads, showRailways }: Props) {
   const mapRef = useRef<MapRef>(null)
 
   // Toutes les données "chaudes" en ref — jamais de setState dans la boucle RAF
   const positionsRef = useRef<Map<string, [number, number]>>(new Map())
   const aircraftRef = useRef<Map<string, Aircraft>>(new Map())
   const animDataRef = useRef<Map<string, AnimData>>(new Map())
+  // [lat, lng, heading]
+  const railwayPositionsRef = useRef<Map<string, [number, number, number]>>(new Map())
+  const railwayDataRef = useRef<Map<string, Train>>(new Map())
+  const railwayShapesRef = useRef<Map<string, [number, number, number][]>>(new Map())
+  const railwayAnimDataRef = useRef<Map<string, TrainAnimData>>(new Map())
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const railwayCanvasRef = useRef<HTMLCanvasElement | null>(null)
+  const canvasCtxRef = useRef<CanvasRenderingContext2D | null>(null)
+  const railwayCanvasCtxRef = useRef<CanvasRenderingContext2D | null>(null)
   const zoomRef = useRef(6)
+  const lastZoomStateRef = useRef(6)
 
-  // State React pour les positions (30fps)
+  // State React pour les positions (throttlé à ~3fps)
   const [positions, setPositions] = useState<Map<string, [number, number]>>(new Map())
+  const [railwayPositions, setRailwayPositions] = useState<Map<string, [number, number, number]>>(new Map())
   const [openPopupId, setOpenPopupId] = useState<string | null>(null)
+  const [openTrainPopupId, setOpenTrainPopupId] = useState<string | null>(null)
+  const [zoomState, setZoomState] = useState(6)
 
   const rafRef = useRef<number | null>(null)
 
-  // Nettoyage du canvas à l'unmount
+  const roadGeoJSON = useMemo(() => getRoadGeoJSON(roadData), [roadData])
+
+  // Convertir les shapes GTFS des trips actifs en GeoJSON pour affichage
+  const railwayGeoJSON = useMemo(() => {
+    if (railwayShapes.size === 0) return null
+    const features: GeoJSON.Feature[] = []
+    for (const [tripId, shape] of railwayShapes) {
+      if (shape.length < 2) continue
+      features.push({
+        type: 'Feature',
+        properties: { trip_id: tripId },
+        geometry: {
+          type: 'LineString',
+          coordinates: shape.map(([lat, lon]) => [lon, lat]),
+        },
+      })
+    }
+    if (features.length === 0) return null
+    return { type: 'FeatureCollection' as const, features }
+  }, [railwayShapes])
+
+  // Nettoyage du canvas avion à l'unmount
   useEffect(() => {
-    return () => { canvasRef.current?.remove() }
+    return () => {
+      canvasRef.current?.remove()
+      railwayCanvasRef.current?.remove()
+    }
   }, [])
+
+  // Visibilité canvas avions
+  useEffect(() => {
+    if (canvasRef.current) canvasRef.current.style.display = showAircraft ? 'block' : 'none'
+  }, [showAircraft])
+
+  // Visibilité canvas trains
+  useEffect(() => {
+    if (railwayCanvasRef.current) railwayCanvasRef.current.style.display = showRailways ? 'block' : 'none'
+  }, [showRailways])
+
+  // Sync shapes ferroviaires depuis les props
+  // Quand les shapes arrivent (chargement initial ou refresh 5 min), créer les animations
+  // pour les trains déjà connus qui n'avaient pas encore de shape (race condition).
+  useEffect(() => {
+    railwayShapesRef.current = railwayShapes
+    for (const [tripId, train] of railwayDataRef.current) {
+      const shape = railwayShapes.get(tripId)
+      if (!shape || shape.length < 2) continue
+      // Ne pas écraser une animation shape déjà valide (Infinity = fallback heading, à remplacer)
+      const existing = railwayAnimDataRef.current.get(tripId)
+      if (existing && existing.maxDist !== Infinity && existing.maxDist > existing.minDist) continue
+      const distTarget = projectOnPolyline(shape, [train.latitude, train.longitude])
+      railwayAnimDataRef.current.set(tripId, {
+        distFrom: distTarget,
+        distTarget,
+        speedMs: (train.speed_kmh ?? 0) / 3.6,
+        startTime: performance.now(),
+        maxDist: shape[shape.length - 1][2],
+        minDist: shape[0][2],
+        baseLat: train.latitude,
+        baseLng: train.longitude,
+      })
+    }
+  }, [railwayShapes])
 
   // Boucle RAF globale unique — met à jour toutes les positions, une seule fois par frame
   useEffect(() => {
     let lastFrameTime = 0
     let lastCircleTime = 0
+    let lastReactUpdateTime = 0
 
     function loop(now: number) {
       rafRef.current = requestAnimationFrame(loop)
@@ -340,6 +151,8 @@ export default React.memo(function NoiseMap({ aircraftData }: Props) {
       lastFrameTime = now
 
       let changed = false
+
+      // --- Avions ---
       for (const [icao, anim] of animDataRef.current) {
         const aircraft = aircraftRef.current.get(icao)
         if (!aircraft) continue
@@ -370,21 +183,60 @@ export default React.memo(function NoiseMap({ aircraftData }: Props) {
         changed = true
       }
 
-      // Halos canvas : throttlé à 5fps, indépendamment de changed (pan/zoom doit aussi redessiner)
+      // --- Trains ---
+      for (const [tripId, anim] of railwayAnimDataRef.current) {
+        const train = railwayDataRef.current.get(tripId)
+        if (!train) continue
+
+        const shape = railwayShapesRef.current.get(tripId)
+        const elapsedMs = now - anim.startTime
+
+        if (shape && shape.length >= 2) {
+          // Shape disponible → slide puis extrapolation
+          let dist: number
+          if (elapsedMs < TRAIN_SLIDE_DURATION) {
+            // Phase slide : transition douce de distFrom vers distTarget
+            const t = elapsedMs / TRAIN_SLIDE_DURATION
+            dist = anim.distFrom + (anim.distTarget - anim.distFrom) * t
+          } else {
+            // Phase extrapolation : avance depuis distTarget par la vitesse
+            const beyondSec = (elapsedMs - TRAIN_SLIDE_DURATION) / 1000
+            dist = anim.distTarget + anim.speedMs * beyondSec
+          }
+          dist = Math.min(dist, anim.maxDist)
+          const [lat, lng] = posAtDist(shape, dist)
+          const hdg = headingAtDist(shape, dist)
+          railwayPositionsRef.current.set(tripId, [lat, lng, hdg])
+        } else {
+          // Pas de shape → train immobile à sa position API (un train ne peut pas extrapoler en ligne droite)
+          railwayPositionsRef.current.set(tripId, [anim.baseLat, anim.baseLng, train.heading ?? 0])
+        }
+        changed = true
+      }
+
+      // Halos canvas : throttlé à 5fps — toujours actif (redraw natif, pas de CSS transform)
       if (now - lastCircleTime >= 200) {
         lastCircleTime = now
-        const canvas = canvasRef.current
         const map = mapRef.current
-        if (canvas && map) {
-          const canvasContext = canvas.getContext('2d')
-          if (canvasContext) drawHalos(canvasContext, Array.from(aircraftRef.current.values()), positionsRef.current, map, zoomRef.current)
+        const ctx = canvasCtxRef.current
+        if (ctx && map) {
+          drawHalos(ctx, aircraftRef.current, positionsRef.current, map, zoomRef.current)
+        }
+        // Halos trains
+        const rCtx = railwayCanvasCtxRef.current
+        if (rCtx && map) {
+          drawRailwayHalos(rCtx, railwayDataRef.current, railwayPositionsRef.current, map, zoomRef.current)
         }
       }
 
       if (!changed) return
 
-      // Un seul setState par frame pour les markers React
-      setPositions(new Map(positionsRef.current))
+      // Markers React throttlés à ~3fps (333ms) — le canvas anime à 30fps via positionsRef
+      if (now - lastReactUpdateTime >= 333) {
+        lastReactUpdateTime = now
+        setPositions(new Map(positionsRef.current))
+        setRailwayPositions(new Map(railwayPositionsRef.current))
+      }
     }
 
     rafRef.current = requestAnimationFrame(loop)
@@ -425,64 +277,191 @@ export default React.memo(function NoiseMap({ aircraftData }: Props) {
     }
   }, [aircraftData])
 
+  // Sync train positions from props
+  useEffect(() => {
+    const currentTrips = new Set(railwayData.map(t => t.trip_id))
+
+    for (const tid of railwayDataRef.current.keys()) {
+      if (!currentTrips.has(tid)) {
+        railwayDataRef.current.delete(tid)
+        railwayPositionsRef.current.delete(tid)
+        railwayAnimDataRef.current.delete(tid)
+      }
+    }
+
+    for (const train of railwayData) {
+      railwayDataRef.current.set(train.trip_id, train)
+
+      if (!railwayPositionsRef.current.has(train.trip_id)) {
+        railwayPositionsRef.current.set(train.trip_id, [train.latitude, train.longitude, train.heading ?? 0])
+      }
+
+      const shape = railwayShapesRef.current.get(train.trip_id)
+      const currentPos = railwayPositionsRef.current.get(train.trip_id)
+      if (shape && shape.length >= 2) {
+        // Projeter la position interpolée actuelle (pas la position API brute)
+        let distFrom = 0
+        if (currentPos) {
+          distFrom = projectOnPolyline(shape, [currentPos[0], currentPos[1]])
+        }
+        // Projeter la position API pour la cible
+        const distTarget = projectOnPolyline(shape, [train.latitude, train.longitude])
+        // Train nouveau → pas de slide, apparition directe
+        if (!currentPos) {
+          distFrom = distTarget
+        }
+        railwayAnimDataRef.current.set(train.trip_id, {
+          distFrom,
+          distTarget,
+          speedMs: (train.speed_kmh ?? 0) / 3.6,
+          startTime: performance.now(),
+          maxDist: shape[shape.length - 1][2],
+          minDist: shape[0][2],
+          baseLat: currentPos ? currentPos[0] : train.latitude,
+          baseLng: currentPos ? currentPos[1] : train.longitude,
+        })
+      } else {
+        // Pas de shape → train immobile à sa position API
+        railwayAnimDataRef.current.set(train.trip_id, {
+          distFrom: 0,
+          distTarget: 0,
+          speedMs: 0,
+          startTime: performance.now(),
+          maxDist: Infinity,
+          minDist: 0,
+          baseLat: train.latitude,
+          baseLng: train.longitude,
+        })
+      }
+    }
+  }, [railwayData])
+
   /**
-   * Crée et insère un canvas HTML au-dessus du canvas WebGL de MapLibre.
-   * Lance un premier dessin des halos.
+   * Crée et insère le canvas HTML des halos avion au-dessus du canvas WebGL de MapLibre.
    */
   function initCanvas() {
     const map = mapRef.current
     if (!map) return
+    const container = (map as any).getCanvasContainer() as HTMLElement
+    const webglCanvas = container.querySelector('.maplibregl-canvas') as HTMLElement
+
     const canvas = document.createElement('canvas')
     canvas.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;'
     canvasRef.current = canvas
-    const container = (map as any).getCanvasContainer() as HTMLElement
-    const webglCanvas = container.querySelector('.maplibregl-canvas') as HTMLElement
+    canvasCtxRef.current = canvas.getContext('2d')
     if (webglCanvas) {
       webglCanvas.insertAdjacentElement('afterend', canvas)
     } else {
       container.appendChild(canvas)
     }
+
+    const railwayCanvas = document.createElement('canvas')
+    railwayCanvas.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;'
+    railwayCanvasRef.current = railwayCanvas
+    railwayCanvasCtxRef.current = railwayCanvas.getContext('2d')
+    // Insérer après le canvas aircraft (pas après webgl) pour être au-dessus dans le DOM
+    if (canvas) {
+      canvas.insertAdjacentElement('afterend', railwayCanvas)
+    } else if (webglCanvas) {
+      webglCanvas.insertAdjacentElement('afterend', railwayCanvas)
+    } else {
+      container.appendChild(railwayCanvas)
+    }
+
     redrawHalos()
   }
 
   /**
    * Redessine les halos de bruit sur le canvas en lisant l'état courant via les refs.
    */
-  function redrawHalos() {
-    const canvas = canvasRef.current
+  const redrawHalos = useCallback(() => {
     const map = mapRef.current
-    if (!canvas || !map) return
-    const canvasContext = canvas.getContext('2d')
-    if (canvasContext) drawHalos(canvasContext, Array.from(aircraftRef.current.values()), positionsRef.current, map, zoomRef.current)
-  }
+    if (!map) return
+    const ctx = canvasCtxRef.current
+    if (ctx) drawHalos(ctx, aircraftRef.current, positionsRef.current, map, zoomRef.current)
+    const rCtx = railwayCanvasCtxRef.current
+    if (rCtx) drawRailwayHalos(rCtx, railwayDataRef.current, railwayPositionsRef.current, map, zoomRef.current)
+  }, [])
+
+  const handleMove = useCallback((e: any) => {
+    const newZoom = e.viewState.zoom
+    zoomRef.current = newZoom
+    if (Math.abs(newZoom - lastZoomStateRef.current) > 0.01) {
+      lastZoomStateRef.current = newZoom
+      setZoomState(newZoom)
+    }
+    redrawHalos()
+  }, [redrawHalos])
 
   // Callbacks stables pour éviter les re-renders des AircraftMarker
   const handleMarkerClick = useCallback((icao: string) => setOpenPopupId(icao), [])
   const handlePopupClose = useCallback(() => setOpenPopupId(null), [])
-  const handleMapMoveStart = useCallback(() => setOpenPopupId(null), [])
+  const handleTrainMarkerClick = useCallback((tripId: string) => setOpenTrainPopupId(tripId), [])
+  const handleTrainPopupClose = useCallback(() => setOpenTrainPopupId(null), [])
+  const handleMapMoveStart = useCallback(() => {
+    setOpenPopupId(null)
+    setOpenTrainPopupId(null)
+  }, [])
 
   // Liste mémoïsée des markers (évite de recréer le tableau à chaque render)
   const markerList = useMemo(() => Array.from(positions.entries()), [positions])
+  const trainMarkerList = useMemo(() => Array.from(railwayPositions.entries()), [railwayPositions])
 
-  // Facteur zoom→taille mémoïsé (se recalcule quand positions change, au même rythme que le RAF)
-  const zoomFactor = useMemo(() => {
-    const z = zoomRef.current
-    return Math.max(0, Math.min(1, (z - MIN_ZOOM) / (MAX_ZOOM - MIN_ZOOM)))
-  }, [positions])
+  // Facteur zoom→taille mémoïsé — dépend uniquement du zoom, pas des positions (30fps)
+  const zoomFactor = useMemo(() =>
+    Math.max(0, Math.min(1, (zoomState - MIN_ZOOM) / (MAX_ZOOM - MIN_ZOOM))),
+  [zoomState])
 
   return (
     <MapGL
       ref={mapRef}
-      initialViewState={{ longitude: 1.888334, latitude: 46.603354, zoom: 6 }}
+      initialViewState={{ longitude: 1.888334, latitude: LAT_REF, zoom: 6 }}
       style={{ width: '100vw', height: '100vh' }}
       mapStyle={MAP_STYLE}
-      minZoom={6}
-      maxZoom={13}
+      minZoom={MIN_ZOOM}
+      maxZoom={MAX_ZOOM}
       onLoad={initCanvas}
+      onClick={handleMapMoveStart}
       onMoveStart={handleMapMoveStart}
-      onMove={(e) => { zoomRef.current = e.viewState.zoom; redrawHalos() }}
+      onMove={handleMove}
+      onMoveEnd={redrawHalos}
     >
-      {markerList.map(([icao, [lat, lng]]) => {
+      {roadGeoJSON && showRoads && (
+        <Source id="road-noise" type="geojson" data={roadGeoJSON}>
+          <Layer {...roadHaloOuter} />
+          <Layer {...roadHaloMid} />
+          <Layer {...roadHaloInner} />
+          <Layer {...roadCoreLayer} />
+        </Source>
+      )}
+
+      {railwayGeoJSON && showRailways && (
+        <Source id="railway-lines" type="geojson" data={railwayGeoJSON}>
+          <Layer {...railwayLineLayer} />
+        </Source>
+      )}
+
+      {showRailways && trainMarkerList.map(([tripId, pos]: [string, [number, number, number]]) => {
+        const [lat, lng, heading] = pos
+        const train = railwayDataRef.current.get(tripId)
+        if (!train) return null
+        return (
+          <TrainMarker
+            key={tripId}
+            train={train}
+            lat={lat}
+            lng={lng}
+            heading={heading}
+            zoomFactor={zoomFactor}
+            isOpen={openTrainPopupId === tripId}
+            onClick={handleTrainMarkerClick}
+            onClose={handleTrainPopupClose}
+          />
+        )
+      })}
+
+      {showAircraft && markerList.map(([icao, pos]: [string, [number, number]]) => {
+        const [lat, lng] = pos
         const aircraft = aircraftRef.current.get(icao)
         if (!aircraft) return null
         return (

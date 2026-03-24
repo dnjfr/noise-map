@@ -5,6 +5,6 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY processor.py .
+COPY railway-processor.py .
 
-CMD ["python", "-u", "processor.py"]
+CMD ["python", "-u", "railway-processor.py"]

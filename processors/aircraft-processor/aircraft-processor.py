@@ -52,7 +52,7 @@ class AircraftPosition(Base):
     aircraft_category = Column(String(5))
 
 class NoiseLevel(Base):
-    __tablename__ = "noise_levels"
+    __tablename__ = "aircraft_noise_levels"
     
     time = Column(TIMESTAMP(timezone=True), primary_key=True)
     latitude = Column(Float, primary_key=True, nullable=False)

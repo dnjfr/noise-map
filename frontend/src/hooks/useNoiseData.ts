@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { perfFetch, perfJson, perfDone } from './perfLog'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 const UPDATE_INTERVAL = 3000
@@ -29,12 +30,18 @@ export interface Stats {
   aircraft_count: number
   avg_noise_db: number
   max_noise_db: number
+  railway_train_count: number
+  railway_avg_noise_db: number
+  railway_max_noise_db: number
 }
 
-interface NoiseState {
+interface NoiseData {
   noiseData: NoiseZone[]
   aircraftData: Aircraft[]
   stats: Stats | null
+}
+
+interface NoiseState extends NoiseData {
   lastUpdate: Date | null
 }
 
@@ -44,14 +51,14 @@ interface NoiseState {
  * @returns {NoiseState} Objet contenant noiseData, aircraftData, stats et lastUpdate
  */
 export function useNoiseData() {
-  const [state, setState] = useState<NoiseState>({
+  const [data, setData] = useState<NoiseData>({
     noiseData: [],
     aircraftData: [],
     stats: null,
-    lastUpdate: null,
   })
+  const [lastUpdate, setLastUpdate] = useState<Date | null>(null)
 
-  const prevRef = useRef<NoiseState | null>(null)
+  const prevRef = useRef<NoiseData | null>(null)
 
   /**
    * Récupère les données de bruit, d'avions et de statistiques depuis l'API.
@@ -59,40 +66,51 @@ export function useNoiseData() {
    * En cas de changement, met à jour l'état ; sinon, met à jour uniquement lastUpdate.
    * @returns {Promise<void>}
    */
+  const fetchCountRef = useRef(0)
   const fetchData = useCallback(async () => {
+    const isFirst = fetchCountRef.current === 0
+    fetchCountRef.current++
+    const t0 = performance.now()
     try {
       const [noiseRes, aircraftRes, statsRes] = await Promise.all([
-        fetch(`${API_URL}/api/noise/current?min_noise=40`),
-        fetch(`${API_URL}/api/aircraft/current`),
-        fetch(`${API_URL}/api/stats`),
+        isFirst ? perfFetch('noise', `${API_URL}/api/noise/current?min_noise=40`) : fetch(`${API_URL}/api/noise/current?min_noise=40`),
+        isFirst ? perfFetch('aircraft', `${API_URL}/api/aircraft/current`) : fetch(`${API_URL}/api/aircraft/current`),
+        isFirst ? perfFetch('stats', `${API_URL}/api/stats`) : fetch(`${API_URL}/api/stats`),
       ])
-      const noiseResult = await noiseRes.json()
-      const aircraftResult = await aircraftRes.json()
-      const statsResult = await statsRes.json()
+      const noiseResult = isFirst ? await perfJson<any>('noise', noiseRes) : await noiseRes.json()
+      const aircraftResult = isFirst ? await perfJson<any>('aircraft', aircraftRes) : await aircraftRes.json()
+      const statsResult = isFirst ? await perfJson<any>('stats', statsRes) : await statsRes.json()
+      if (isFirst) {
+        perfDone('noise', noiseResult.data?.length ?? 0, t0)
+        perfDone('aircraft', aircraftResult.data?.length ?? 0, t0)
+        perfDone('stats', '1', t0)
+      }
 
       const newAircraftCount = aircraftResult.data?.length ?? 0
       const prevAircraftCount = prevRef.current?.aircraftData.length ?? -1
       const newNoiseCount = noiseResult.data?.length ?? 0
       const prevNoiseCount = prevRef.current?.noiseData.length ?? -1
 
-      if (
-        newAircraftCount === prevAircraftCount &&
-        newNoiseCount === prevNoiseCount &&
-        JSON.stringify(statsResult) === JSON.stringify(prevRef.current?.stats)
-      ) {
+      const prevStats = prevRef.current?.stats
+      const statsUnchanged = prevStats != null &&
+        statsResult.aircraft_count === prevStats.aircraft_count &&
+        statsResult.avg_noise_db === prevStats.avg_noise_db &&
+        statsResult.max_noise_db === prevStats.max_noise_db
+
+      if (newAircraftCount === prevAircraftCount && newNoiseCount === prevNoiseCount && statsUnchanged) {
         // Données identiques : mettre à jour uniquement l'horloge, sans recréer les arrays
-        setState(prev => ({ ...prev, lastUpdate: new Date() }))
+        setLastUpdate(new Date())
         return
       }
 
-      const newState: NoiseState = {
+      const newData: NoiseData = {
         noiseData: noiseResult.data || [],
         aircraftData: aircraftResult.data || [],
         stats: statsResult,
-        lastUpdate: new Date(),
       }
-      prevRef.current = newState
-      setState(newState)
+      prevRef.current = newData
+      setData(newData)
+      setLastUpdate(new Date())
     } catch (error) {
       console.error('Erreur lors du chargement des données:', error)
     }
@@ -104,5 +122,5 @@ export function useNoiseData() {
     return () => clearInterval(interval)
   }, [fetchData])
 
-  return state
+  return useMemo(() => ({ ...data, lastUpdate }), [data, lastUpdate])
 }
