@@ -43,7 +43,7 @@ start:
 
 stop:
 	@echo "⏹️  Arrêt des services..."
-	docker compose down
+	docker compose stop
 	@echo "✅ Services arrêtés"
 
 restart:
@@ -255,3 +255,35 @@ import-madb:  ## Charge les données MAdB dans TimescaleDB
 	docker compose run --rm --no-deps -v $(PWD)/aircraft-data:/data \
 		-e DB_HOST=timescaledb \
 		aircraft-processor python /data/import_madb.py
+
+# --- Backup / Restore ---
+
+BACKUP_DIR := ./backup_db
+
+# Usage: make db-backup
+db-backup:
+	@mkdir -p $(BACKUP_DIR)
+	@echo "Backup des tables de référence statiques (noise_map)..."
+	docker exec timescaledb pg_dump -U noiseuser -d noise_map --clean --if-exists \
+		-t icao_type_mapping \
+		-t madb_noise_ref \
+		-t icao_to_madb_pattern \
+		-t rail_stops \
+		-t rail_routes \
+		-t rail_shapes \
+		-t rail_trips \
+		-t rail_stop_times \
+		-t rail_calendar \
+		-t railway_lines_rfn \
+		-t railway_routes_ref \
+		-t road_segments_ref \
+		| gzip > $(BACKUP_DIR)/noise_map_$$(date +%Y%m%d).sql.gz
+	@echo "Backup sauvegardé: $(BACKUP_DIR)/noise_map_$$(date +%Y%m%d).sql.gz"
+
+# Usage: make db-restore FILE=noise_map_20260320.sql.gz
+db-restore:
+	@test -n "$(FILE)" || (echo "Usage: make db-restore FILE=noise_map_20260320.sql.gz" && exit 1)
+	@test -f $(BACKUP_DIR)/$(FILE) || (echo "Fichier introuvable: $(BACKUP_DIR)/$(FILE)" && exit 1)
+	@echo "Restauration depuis $(BACKUP_DIR)/$(FILE)..."
+	gunzip -c $(BACKUP_DIR)/$(FILE) | docker exec -i timescaledb psql -U noiseuser -d noise_map
+	@echo "Restauration terminée."
