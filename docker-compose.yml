@@ -123,6 +123,7 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_MAPTILER_API: $MAPTILER_API
+        VITE_API_URL: $VITE_API_URL
     container_name: noise-frontend
     depends_on:
       - api

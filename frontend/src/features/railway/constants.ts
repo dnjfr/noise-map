@@ -1,6 +1,6 @@
-export const RAILWAY_LINE_COLOR = '#ffffff'
-export const RAILWAY_LINE_WIDTH = 1
-export const RAILWAY_LINE_OPACITY = 0.2
+export const RAILWAY_LINE_COLOR = '#c4bebe'
+export const RAILWAY_LINE_WIDTH = 1.5
+export const RAILWAY_LINE_OPACITY = 0.9
 
 export const TRAIN_ICON_SIZE = 14
 export const TRAIN_COLOR = '#a5b4fc'

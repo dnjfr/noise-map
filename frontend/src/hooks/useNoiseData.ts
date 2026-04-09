@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { perfFetch, perfJson, perfDone } from './perfLog'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const API_URL = import.meta.env.VITE_API_URL
 const UPDATE_INTERVAL = 3000
 
 export interface NoiseZone {
@@ -73,9 +73,9 @@ export function useNoiseData() {
     const t0 = performance.now()
     try {
       const [noiseRes, aircraftRes, statsRes] = await Promise.all([
-        isFirst ? perfFetch('noise', `${API_URL}/api/noise/current?min_noise=40`) : fetch(`${API_URL}/api/noise/current?min_noise=40`),
-        isFirst ? perfFetch('aircraft', `${API_URL}/api/aircraft/current`) : fetch(`${API_URL}/api/aircraft/current`),
-        isFirst ? perfFetch('stats', `${API_URL}/api/stats`) : fetch(`${API_URL}/api/stats`),
+        isFirst ? perfFetch('noise', `http://${API_URL}:8000/api/noise/current?min_noise=40`) : fetch(`http://${API_URL}:8000/api/noise/current?min_noise=40`),
+        isFirst ? perfFetch('aircraft', `http://${API_URL}:8000/api/aircraft/current`) : fetch(`http://${API_URL}:8000/api/aircraft/current`),
+        isFirst ? perfFetch('stats', `http://${API_URL}:8000/api/stats`) : fetch(`http://${API_URL}:8000/api/stats`),
       ])
       const noiseResult = isFirst ? await perfJson<any>('noise', noiseRes) : await noiseRes.json()
       const aircraftResult = isFirst ? await perfJson<any>('aircraft', aircraftRes) : await aircraftRes.json()

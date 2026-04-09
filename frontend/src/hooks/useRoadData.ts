@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { perfFetch, perfJson, perfDone } from './perfLog'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const API_URL = import.meta.env.VITE_API_URL
 const FAST_INTERVAL = 3000   // 3s pendant le chargement initial
 const SLOW_INTERVAL = 30000  // 30s une fois les données stables
 
@@ -36,8 +36,8 @@ export function useRoadData(): { roadData: RoadSegment[]; lastUpdate: Date | nul
     const t0 = performance.now()
     try {
       const response = isFirst
-        ? await perfFetch('road', `${API_URL}/api/road/current`)
-        : await fetch(`${API_URL}/api/road/current`)
+        ? await perfFetch('road', `http://${API_URL}:8000/api/road/current`)
+        : await fetch(`http://${API_URL}:8000/api/road/current`)
       if (!response.ok) return
       const result = isFirst
         ? await perfJson<any>('road', response)

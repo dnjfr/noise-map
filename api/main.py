@@ -596,10 +596,10 @@ def get_current_railway(db: Session = Depends(get_db)):
 
 @app.get("/api/railway/lines")
 def get_railway_lines(db: Session = Depends(get_db)):
-    """Retourne les géométries officielles SNCF des lignes du RFN sous forme GeoJSON.
+    """Retourne les géométries GTFS SNCF des lignes ferroviaires sous forme GeoJSON.
 
-    Source : table railway_lines_rfn (import formes-des-lignes-du-rfn.geojson SNCF).
-    Filtre : uniquement les lignes EXPLOITE (actives). Mise en cache 1h (données statiques).
+    Source : rail_shapes + rail_trips + rail_routes (GTFS SNCF).
+    Une shape représentative par route, décimée (1 point sur 5). Mise en cache 1h.
 
     Returns:
         dict: GeoJSON FeatureCollection avec les LineStrings des voies ferrées.
@@ -611,24 +611,44 @@ def get_railway_lines(db: Session = Depends(get_db)):
 
     try:
         rows = db.execute(text("""
-            SELECT code_ligne, libelle, coords
-            FROM railway_lines_rfn
-            WHERE mnemo = 'EXPLOITE'
-            ORDER BY code_ligne, id
+            WITH route_shape AS (
+                SELECT DISTINCT ON (route_id) route_id, shape_id
+                FROM rail_trips
+                WHERE shape_id IS NOT NULL
+                ORDER BY route_id
+            )
+            SELECT
+                rs.shape_id,
+                rs.shape_pt_lat,
+                rs.shape_pt_lon,
+                rr.route_short_name,
+                rr.route_type
+            FROM route_shape rts
+            JOIN rail_shapes rs ON rs.shape_id = rts.shape_id
+            JOIN rail_routes rr ON rr.route_id = rts.route_id
+            WHERE rr.route_type IN (0, 1, 2)
+              AND MOD(rs.shape_pt_sequence - 1, 5) = 0
+            ORDER BY rts.route_id, rs.shape_pt_sequence
         """)).fetchall()
 
-        features = []
+        shapes: dict[str, list] = {}
+        shape_props: dict[str, dict] = {}
         for r in rows:
-            coords = r.coords
-            if not coords or len(coords) < 2:
+            if r.shape_id not in shapes:
+                shapes[r.shape_id] = []
+                shape_props[r.shape_id] = {
+                    "route_short_name": r.route_short_name,
+                    "route_type": r.route_type,
+                }
+            shapes[r.shape_id].append([r.shape_pt_lon, r.shape_pt_lat])
+
+        features = []
+        for shape_id, coords in shapes.items():
+            if len(coords) < 2:
                 continue
-            # coords déjà en [[lon, lat], ...] (GeoJSON natif SNCF)
             features.append({
                 "type": "Feature",
-                "properties": {
-                    "code_ligne": r.code_ligne,
-                    "libelle": r.libelle,
-                },
+                "properties": shape_props[shape_id],
                 "geometry": {
                     "type": "LineString",
                     "coordinates": coords,
@@ -638,7 +658,7 @@ def get_railway_lines(db: Session = Depends(get_db)):
         result = {"type": "FeatureCollection", "features": features}
         with _railway_lines_cache_lock:
             _railway_lines_cache[cache_key] = result
-        logger.info(f"railway/lines: {len(features)} lignes RFN SNCF mises en cache")
+        logger.info(f"railway/lines: {len(features)} lignes GTFS SNCF mises en cache")
         return result
 
     except Exception as e:

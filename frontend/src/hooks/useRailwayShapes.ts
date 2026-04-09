@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { perfFetch, perfJson, perfDone } from './perfLog'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const API_URL = import.meta.env.VITE_API_URL
 const SHAPES_INTERVAL = 2 * 60 * 1000 // 2 min (aligné GTFS-RT Trip Updates)
 
 type ShapePoints = [number, number, number][]
@@ -18,7 +18,7 @@ export function useRailwayShapes() {
     const label = `railway-shapes-${detail}`
     const t0 = performance.now()
     try {
-      const res = await perfFetch(label, `${API_URL}/api/railway/shapes?detail=${detail}`)
+      const res = await perfFetch(label, `http://${API_URL}:8000/api/railway/shapes?detail=${detail}`)
       if (!res.ok) return null
       const json: Record<string, ShapePoints> = await perfJson(label, res)
       const entries = Object.entries(json)

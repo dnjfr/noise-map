@@ -256,6 +256,15 @@ import-madb:  ## Charge les données MAdB dans TimescaleDB
 		-e DB_HOST=timescaledb \
 		aircraft-processor python /data/import_madb.py
 
+# --- Init DB ---
+
+# Usage: make db-init
+# A lancer une seule fois sur une nouvelle VM (avant db-restore si besoin)
+db-init:
+	@echo "Initialisation du schéma (tables + hypertables)..."
+	docker exec -i timescaledb psql -U noiseuser -d noise_map < init-db.sql
+	@echo "Schéma initialisé."
+
 # --- Backup / Restore ---
 
 BACKUP_DIR := ./backup_db

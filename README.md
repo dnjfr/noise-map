@@ -1,6 +1,11 @@
-# 🗺️ Carte du bruit en France - Données temps réel
+# 🗺️ Carte du bruit en France - Données semi temps réel
 
 Projet de visualisation en temps réel des niveaux de bruit aérien, routier et ferroviaire au-dessus de la France, utilisant Kafka, TimescaleDB et OpenSky Network.
+
+## 📋 Idée d'origine
+Le bruit est un fléau qui génère stress et fatigue. Mais est-ce qu’on se rend vraiment compte du bruit qui nous entoure ?
+
+Les cartes de bruit existantes reposent sur des modèles de propagation acoustique (NMPB, CNOSSOS-EU), alimentés par des données très précises (trafic, géométrie, topographie). Mais ce sont des snapshots statiques, basés sur des comptages périodiques et à ma connaissance, il n’existe pas vraiment de carte en temps réel, c’est de là qu’est né ce projet.
 
 ## 📋 Architecture
 
@@ -26,33 +31,59 @@ OpenSky API → Producer (Python) → Kafka → Processor → TimescaleDB → AP
 
 ```
 noise-map/
-├── docker-compose.yml
-├── init-db.sql
-├── producer/
-│   ├── Dockerfile
-│   ├── requirements.txt
-│   └── producer.py
-├── processor/
-│   ├── Dockerfile
-│   ├── requirements.txt
-│   └── processor.py
 ├── api/
 │   ├── Dockerfile
 │   ├── requirements.txt
 │   └── main.py
-└── frontend/
-    ├── Dockerfile
-    ├── index.html
-    └── app.js
+├── backup_db/
+├── data/
+├── frontend/
+│   ├── Dockerfile
+│   ├── index.html
+│   └──  app.js
+├── processors/
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   └── processor.py
+├── producers/
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   └── producer.py
+├── .env
+├── docker-compose.yml
+├── init-db.sql
+├── Makefile
+└── README.md
+
+
+
 ```
 
 ### Démarrage
 
 1. **Cloner ou créer la structure de dossiers** avec tous les fichiers fournis
 
+2. **Créer un fichier `.env` à partir du fichier exemple** et entrer vos identifiants ainsi que vos clés API Maptiler et TomTom
+
+3. Initialiser la base de données et la création des tables
+```bash
+make db-init
+```
+
+4. Récupérer le dump des tables statiques et le placer non décompressé dans le répertoire `backup_db`
+```bash
+make db-init
+```
+
+5. Restaurer les tables statiques 
+```bash
+make db-restore FILE=noise_map_20260408.sql.gz
+```
+
+
 2. **Lancer l'infrastructure** :
 ```bash
-docker-compose up -d
+make start
 ```
 
 3. **Vérifier que tout fonctionne** :
@@ -124,7 +155,7 @@ environment:
 
 ### Changer la zone géographique
 
-Par défaut, la France métropolitaine. Pour modifier, édite `FRANCE_BBOX` :
+Par défaut, la France métropolitaine. Pour modifier, éditer `FRANCE_BBOX` :
 ```yaml
 # Format: lon_min,lat_min,lon_max,lat_max
 FRANCE_BBOX: "-5.0,41.0,10.0,51.5"
@@ -198,13 +229,46 @@ Si vous accédez au frontend depuis un autre domaine que localhost, modifier le 
 - Le calcul du bruit est une estimation simplifiée
 - Grille fixe de 10km (pourrait être dynamique selon le zoom)
 
-## 🤝 Contribution
-
-N'hésitez pas à améliorer ce projet ! Quelques idées :
+## 🤝 Pistes d'améliorations
 - Optimiser l'algorithme de calcul du bruit
-- Ajouter d'autres sources de données
+- Améliorer le calcul de la propagation du bruit en tenant compte de la météo, du vent, des aménagements déjà mis en place, etc...
+- Obtenir des données plus précises via des API payantes ou des données non publiques
+- Ajouter d'autres sources de données comme les travaux
 - Améliorer l'UI/UX
+- Réduire le délai d'obtention des données pour un affichage quasi temps réel
 - Ajouter des tests unitaires
+
+
+## Exemples d'utilisation de la carte
+Que faire des données ? Rien n'empêche de créer un dataset de toutes les données enregistrées sur une assez longue période pour créer ensuite des couloirs de bruits et identifier les zones les plus exogènes
+
+### Immobilier & urbanisme
+  - Promoteurs immobiliers : évaluer l'impact sonore avant de lancer un projet de construction
+  - Collectivités locales : identifier les zones à équiper en double vitrage, murs anti-bruit, ouvégétalisation 
+  - PLU / études d'impact : alimenter les dossiers réglementaires (la directive européenne 2002/49/CE impose déjà des cartes de bruit qui semblent être des snapshots statiques basés sur des comptages périodiques)
+
+### Santé publique 
+  - Épidémiologie : croiser les zones d'exposition chronique avec des données de santé (hypertension, troubles du sommeil), ce qui est un sujet de recherche actif à l'OMS
+  - Médecins / mutuelles : identifier les populations à risque selon leur adresse
+  - Maternités / pédiatres : exposition au bruit des nourrissons et enfants
+
+### Transport & mobilité
+  - Optimisation des couloirs aériens : montrer à la DGAC ou aux aéroports quelles trajectoires sont les plus impactantes sur les zones habitées   
+  - Horaires ferroviaires : identifier les tronçons bruyants la nuit pour prioriser les travaux d'isolation
+  - Planification routière : comparer l'impact de déviations ou de nouvelles infrastructures avant construction
+
+### Qualité de vie & usage grand public  
+  - Applications de running / randonnée : proposer des itinéraires calmes
+  - Parents : trouver des parcs ou zones de jeux loin du bruit
+  - Tourisme : recommander des hébergements calmes avec données objectives plutôt que subjectives  
+
+### Entreprises & RH
+  - Choix d'implantation d'entreprise : bureaux dans des zones calmes pour le bien-être des salariés 
+
+### Recherche & institutionnel
+  - SNCF / RATP : mesurer l'impact réel de leurs réseaux vs les estimations statiques actuelles
+  - Aéroports de Paris : suivi en temps réel des engagements de réduction du bruit 
+  - Chercheurs en acoustique urbaine : dataset sur le long terme pour détecter des couloirs de bruits
 
 ## 📄 Licence
 
@@ -212,4 +276,4 @@ Projet à usage éducatif et personnel.
 
 ---
 
-Créé avec ❤️ pour visualiser le bruit en temps réel
+Créé avec ❤️ pour visualiser le bruit en semi temps réel

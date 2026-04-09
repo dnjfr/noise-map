@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { perfFetch, perfJson, perfDone } from './perfLog'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const API_URL = import.meta.env.VITE_API_URL
 const POLL_INTERVAL = 30000
 
 export interface Train {
@@ -32,8 +32,8 @@ export function useRailwayData(): { railwayData: Train[]; lastUpdate: Date | nul
     const t0 = performance.now()
     try {
       const response = isFirst
-        ? await perfFetch('railway-current', `${API_URL}/api/railway/current`)
-        : await fetch(`${API_URL}/api/railway/current`)
+        ? await perfFetch('railway-current', `http://${API_URL}:8000/api/railway/current`)
+        : await fetch(`http://${API_URL}:8000/api/railway/current`)
       if (!response.ok) return
       const result = isFirst
         ? await perfJson<any>('railway-current', response)
