@@ -1,35 +1,36 @@
-import { useState, useEffect, useMemo } from 'react'
-import NoiseMap from './components/Map'
-import StatsPanel from './components/StatsPanel'
-import Legend from './components/Legend'
+import { useEffect, useMemo, useState } from 'react'
 import Header from './components/Header'
 import LayerToggle from './components/LayerToggle'
-import { useNoiseData } from './hooks/useNoiseData'
-import { useRoadData } from './hooks/useRoadData'
-import { useRailwayData } from './hooks/useRailwayData'
-// useRailwayLines supprimé — les shapes GTFS suffisent pour le tracé
-import { useRailwayShapes } from './hooks/useRailwayShapes'
+import Legend from './components/Legend'
+import type { MapStyleKey } from './components/Map'
+import NoiseMap from './components/Map'
+import MapStyleToggle from './components/MapStyleToggle'
+import StatsPanel from './components/StatsPanel'
+import { useAircraftsData } from './hooks/useAircraftsData'
+import { useRailwaysData } from './hooks/useRailwaysData'
+import { useRoadsData } from './hooks/useRoadsData'
+import { useRailwaysShapes } from './hooks/useRailwaysShapes'
 
 const PAGE_OPEN = performance.now()
 console.log(`%c[PERF] ══════ PAGE OUVERTE ══════`, 'color: #22d3ee; font-weight: bold; font-size: 14px')
 
 export default function App() {
-  const { stats, noiseData, aircraftData, lastUpdate } = useNoiseData()
-  const { roadData } = useRoadData()
-  const { railwayData } = useRailwayData()
-  const { shapesData, refreshShapes } = useRailwayShapes()
+  const { stats, aircraftsData, lastUpdate } = useAircraftsData()
+  const { roadsData } = useRoadsData()
+  const { railwaysData } = useRailwaysData()
+  const { shapesData, refreshShapes } = useRailwaysShapes()
 
   // Refresh shapes dès qu'un trip inconnu apparaît (évite les 5 min de fallback ligne droite)
   useEffect(() => {
-    if (railwayData.length === 0) return
-    const hasUnknown = railwayData.some(t => !shapesData.has(t.trip_id))
+    if (railwaysData.length === 0) return
+    const hasUnknown = railwaysData.some(t => !shapesData.has(t.trip_id))
     if (hasUnknown) refreshShapes()
-  }, [railwayData])
+  }, [railwaysData])
 
   // Ne passer que les trains dont la shape est disponible (évite les trains immobiles au chargement)
   const railwayDataWithShapes = useMemo(
-    () => railwayData.filter(t => shapesData.has(t.trip_id) && (shapesData.get(t.trip_id)?.length ?? 0) >= 2),
-    [railwayData, shapesData],
+    () => railwaysData.filter(t => shapesData.has(t.trip_id) && (shapesData.get(t.trip_id)?.length ?? 0) >= 2),
+    [railwaysData, shapesData],
   )
   // Afficher la carte dès qu'au moins une source a répondu (évite 30s de blocage si une API est lente)
   const [loadingTimeout, setLoadingTimeout] = useState(false)
@@ -51,16 +52,20 @@ export default function App() {
   const [showAircraft, setShowAircraft] = useState(true)
   const [showRoads, setShowRoads] = useState(true)
   const [showRailways, setShowRailways] = useState(true)
+  const [mapStyleKey, setMapStyleKey] = useState<MapStyleKey>('grey')
 
   return (
     <div className="relative w-screen h-screen bg-slate-950">
-      <NoiseMap aircraftData={aircraftData} roadData={roadData} railwayData={railwayDataWithShapes} railwayShapes={shapesData} showAircraft={showAircraft} showRoads={showRoads} showRailways={showRailways} />
+      <NoiseMap aircraftsData={aircraftsData} roadsData={roadsData} railwaysData={railwayDataWithShapes} railwaysShapes={shapesData} showAircrafts={showAircraft} showRoads={showRoads} showRailways={showRailways} mapStyleKey={mapStyleKey} />
       <div className="absolute top-4 right-4 z-[1000] flex flex-col gap-3 w-72">
         <Header lastUpdate={lastUpdate} />
-        <StatsPanel stats={stats} roadData={roadData} />
+        <StatsPanel stats={stats} />
       </div>
       <div className="absolute bottom-8 right-4 z-[1000]">
         <Legend />
+      </div>
+      <div className="absolute bottom-4 left-4 z-[1000]">
+        <MapStyleToggle currentStyle={mapStyleKey} onStyleChange={setMapStyleKey} />
       </div>
       <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[1000]">
         <LayerToggle

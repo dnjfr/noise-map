@@ -80,7 +80,7 @@ class AircraftPosition(Base):
     aircraft_desc = Column(String(100))
     aircraft_category = Column(String(5))
 
-class NoiseLevel(Base):
+class AircraftNoiseLevel(Base):
     __tablename__ = "aircraft_noise_levels"
 
     time = Column(TIMESTAMP(timezone=True), primary_key=True)
@@ -177,73 +177,16 @@ def read_root():
         "message": "Noise Map API",
         "version": "1.0.0",
         "endpoints": {
-            "current_noise": "/api/noise/current",
-            "aircraft_positions": "/api/aircraft/current",
-            "noise_history": "/api/noise/history",
+            "aircrafts_positions": "/api/aircrafts/positions",
+            "roads_segments_noise": "/api/roads/segments_noise",
+            "railways_positions": "/api/railways/positions",
+            "railways_shapes": "/api/railways/shapes",
             "stats": "/api/stats",
-            "railway_positions": "/api/railway/current"
         }
     }
 
-@app.get("/api/noise/current")
-def get_current_noise(
-    min_noise: Optional[float] = 40.0,
-    limit: Optional[int] = 1000,
-    db: Session = Depends(get_db)
-):
-    """Retourne les zones de bruit enregistrées dans les 2 dernières minutes.
 
-    Filtrées par niveau minimum. Résultat mis en cache TTL=5s par couple
-    (min_noise, limit) pour réduire la charge DB.
-
-    Args:
-        min_noise (float): Seuil minimum en dB(A), défaut 40.0.
-        limit (int): Nombre maximum de zones retournées, défaut 1000.
-        db (Session): Session SQLAlchemy injectée par Depends.
-
-    Returns:
-        dict: Dictionnaire avec 'count' (int), 'data' (list de zones),
-            et 'timestamp' (ISO 8601).
-    """
-    cache_key = (min_noise, limit)
-    with _noise_cache_lock:
-        if cache_key in _noise_cache:
-            return _noise_cache[cache_key]
-
-    try:
-        two_minutes_ago = datetime.utcnow() - timedelta(minutes=2)
-
-        results = db.query(NoiseLevel).filter(
-            NoiseLevel.time > two_minutes_ago,
-            NoiseLevel.noise_db >= min_noise
-        ).order_by(desc(NoiseLevel.time)).limit(limit).all()
-
-        data = [
-            {
-                "grid_id": r.grid_id,
-                "latitude": r.latitude,
-                "longitude": r.longitude,
-                "noise_db": r.noise_db,
-                "aircraft_count": r.aircraft_count,
-                "time": r.time.isoformat()
-            }
-            for r in results
-        ]
-
-        result = {
-            "count": len(data),
-            "data": data,
-            "timestamp": datetime.utcnow().isoformat()
-        }
-        with _noise_cache_lock:
-            _noise_cache[cache_key] = result
-        return result
-
-    except Exception as e:
-        logger.error(f"Erreur API: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/aircraft/current")
+@app.get("/api/aircrafts/positions")
 def get_current_aircraft(
     limit: Optional[int] = 500,
     db: Session = Depends(get_db)
@@ -310,151 +253,8 @@ def get_current_aircraft(
         logger.error(f"Erreur API: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/noise/history")
-def get_noise_history(
-    grid_id: str,
-    hours: Optional[int] = 1,
-    db: Session = Depends(get_db)
-):
-    """Retourne la série temporelle du bruit pour une cellule de grille.
 
-    Retourne les données sur la période demandée. Utile pour afficher
-    l'évolution du bruit dans le temps pour une zone.
-
-    Args:
-        grid_id (str): Identifiant de grille au format "lat_lon"
-            (ex: "48.80_2.30").
-        hours (int): Nombre d'heures d'historique, défaut 1.
-        db (Session): Session SQLAlchemy injectée par Depends.
-
-    Returns:
-        dict: Dictionnaire avec 'grid_id', 'count' (int), et 'data'
-            (list de {time, noise_db, aircraft_count} triés chronologiquement).
-    """
-    try:
-        time_ago = datetime.utcnow() - timedelta(hours=hours)
-        
-        results = db.query(NoiseLevel).filter(
-            NoiseLevel.grid_id == grid_id,
-            NoiseLevel.time > time_ago
-        ).order_by(NoiseLevel.time.asc()).all()
-        
-        data = [
-            {
-                "time": r.time.isoformat(),
-                "noise_db": r.noise_db,
-                "aircraft_count": r.aircraft_count
-            }
-            for r in results
-        ]
-        
-        return {
-            "grid_id": grid_id,
-            "count": len(data),
-            "data": data
-        }
-    
-    except Exception as e:
-        logger.error(f"Erreur API: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/stats")
-def get_stats(db: Session = Depends(get_db)):
-    """Retourne les statistiques globales de la carte.
-
-    Nombre d'avions en vol (2 dernières minutes), bruit moyen et maximum
-    (2 dernières minutes), et top 10 des zones les plus bruyantes
-    (10 dernières minutes).
-
-    Args:
-        db (Session): Session SQLAlchemy injectée par Depends.
-
-    Returns:
-        dict: Dictionnaire avec 'aircraft_count', 'avg_noise_db',
-            'max_noise_db', 'noisiest_zones' (list), et 'timestamp' (ISO 8601).
-    """
-    try:
-        two_minutes_ago = datetime.utcnow() - timedelta(minutes=2)
-        ten_minutes_ago = datetime.utcnow() - timedelta(minutes=10)
-        
-        # Nombre total d'avions dans les 2 dernières minutes
-        aircraft_count = db.query(func.count(func.distinct(AircraftPosition.icao24))).filter(
-            AircraftPosition.time > two_minutes_ago,
-            AircraftPosition.on_ground == False
-        ).scalar()
-        
-        # Niveau de bruit moyen et max (aérien)
-        noise_stats = db.query(
-            func.avg(NoiseLevel.noise_db).label("avg_noise"),
-            func.max(NoiseLevel.noise_db).label("max_noise")
-        ).filter(
-            NoiseLevel.time > two_minutes_ago
-        ).first()
-
-        # Bruit moyen et max ferroviaire + nombre de trains actifs
-        railway_noise_stats = db.query(
-            func.avg(RailwayNoiseLevel.noise_db).label("avg_noise"),
-            func.max(RailwayNoiseLevel.noise_db).label("max_noise")
-        ).filter(
-            RailwayNoiseLevel.time > two_minutes_ago
-        ).first()
-
-        railway_train_count = db.query(func.count(func.distinct(RailwayPosition.trip_id))).filter(
-            RailwayPosition.time > two_minutes_ago
-        ).scalar()
-        
-        # Zones les plus bruyantes
-        noisiest_zones = db.query(
-            NoiseLevel.grid_id,
-            NoiseLevel.latitude,
-            NoiseLevel.longitude,
-            func.avg(NoiseLevel.noise_db).label("avg_noise")
-        ).filter(
-            NoiseLevel.time > ten_minutes_ago
-        ).group_by(
-            NoiseLevel.grid_id,
-            NoiseLevel.latitude,
-            NoiseLevel.longitude
-        ).order_by(
-            desc("avg_noise")
-        ).limit(10).all()
-        
-        noisiest_data = [
-            {
-                "grid_id": z.grid_id,
-                "latitude": z.latitude,
-                "longitude": z.longitude,
-                "avg_noise": float(z.avg_noise)
-            }
-            for z in noisiest_zones
-        ]
-        
-        return {
-            "aircraft_count": aircraft_count or 0,
-            "avg_noise_db": float(noise_stats.avg_noise) if noise_stats.avg_noise else 0.0,
-            "max_noise_db": float(noise_stats.max_noise) if noise_stats.max_noise else 0.0,
-            "railway_train_count": railway_train_count or 0,
-            "railway_avg_noise_db": float(railway_noise_stats.avg_noise) if railway_noise_stats and railway_noise_stats.avg_noise else 0.0,
-            "railway_max_noise_db": float(railway_noise_stats.max_noise) if railway_noise_stats and railway_noise_stats.max_noise else 0.0,
-            "noisiest_zones": noisiest_data,
-            "timestamp": datetime.utcnow().isoformat()
-        }
-    
-    except Exception as e:
-        logger.error(f"Erreur API: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-def _simplify_geom(geom: list, max_pts: int = 20) -> list:
-    if not geom or len(geom) <= max_pts:
-        return geom
-    step = max(1, len(geom) // max_pts)
-    simplified = geom[::step]
-    if simplified[-1] != geom[-1]:
-        simplified.append(geom[-1])
-    return simplified
-
-
-@app.get("/api/road/current")
+@app.get("/api/roads/segments_noise")
 def get_current_road(db: Session = Depends(get_db)):
     """Retourne les segments routiers avec leur dernier niveau de bruit (< 10 min).
 
@@ -527,15 +327,17 @@ def get_current_road(db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/api/railway/current")
+@app.get("/api/railways/positions")
 def get_current_railway(db: Session = Depends(get_db)):
-    """Retourne les positions actuelles des trains avec leurs routes.
+    """Retourne les positions actuelles des trains (GTFS-RT, fenêtre 5 min).
 
-    Retourne le dernier enregistrement de chaque train dans les 5 dernières minutes.
-    Joint railway_routes_ref pour inclure le tracé de la route (shape_coords).
+    DISTINCT ON trip_id (dernier enregistrement). Joint rail_trips pour
+    trip_headsign et rail_routes pour route_short_name / route_long_name.
+    Résultat mis en cache TTL=10s.
 
     Returns:
-        dict: count, data (liste de trains avec positions et tracés), timestamp.
+        dict: count, data (liste de trains avec trip_id, position, vitesse,
+            retard, arrêts, noms de ligne), timestamp.
     """
     cache_key = "railway_current"
     with _railway_cache_lock:
@@ -546,7 +348,7 @@ def get_current_railway(db: Session = Depends(get_db)):
         cutoff = datetime.utcnow() - timedelta(minutes=5)
 
         rows = db.execute(text("""
-            SELECT DISTINCT ON (rp.trip_id)
+            SELECT DISTINCT ON (rp.trip_id) 
                 rp.trip_id, rp.train_number, rp.route_id,
                 rp.latitude, rp.longitude, rp.speed_kmh, rp.heading,
                 rp.delay_seconds, rp.next_stop_name, rp.prev_stop_name, rp.time,
@@ -594,79 +396,7 @@ def get_current_railway(db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/api/railway/lines")
-def get_railway_lines(db: Session = Depends(get_db)):
-    """Retourne les géométries GTFS SNCF des lignes ferroviaires sous forme GeoJSON.
-
-    Source : rail_shapes + rail_trips + rail_routes (GTFS SNCF).
-    Une shape représentative par route, décimée (1 point sur 5). Mise en cache 1h.
-
-    Returns:
-        dict: GeoJSON FeatureCollection avec les LineStrings des voies ferrées.
-    """
-    cache_key = "railway_lines"
-    with _railway_lines_cache_lock:
-        if cache_key in _railway_lines_cache:
-            return _railway_lines_cache[cache_key]
-
-    try:
-        rows = db.execute(text("""
-            WITH route_shape AS (
-                SELECT DISTINCT ON (route_id) route_id, shape_id
-                FROM rail_trips
-                WHERE shape_id IS NOT NULL
-                ORDER BY route_id
-            )
-            SELECT
-                rs.shape_id,
-                rs.shape_pt_lat,
-                rs.shape_pt_lon,
-                rr.route_short_name,
-                rr.route_type
-            FROM route_shape rts
-            JOIN rail_shapes rs ON rs.shape_id = rts.shape_id
-            JOIN rail_routes rr ON rr.route_id = rts.route_id
-            WHERE rr.route_type IN (0, 1, 2)
-              AND MOD(rs.shape_pt_sequence - 1, 5) = 0
-            ORDER BY rts.route_id, rs.shape_pt_sequence
-        """)).fetchall()
-
-        shapes: dict[str, list] = {}
-        shape_props: dict[str, dict] = {}
-        for r in rows:
-            if r.shape_id not in shapes:
-                shapes[r.shape_id] = []
-                shape_props[r.shape_id] = {
-                    "route_short_name": r.route_short_name,
-                    "route_type": r.route_type,
-                }
-            shapes[r.shape_id].append([r.shape_pt_lon, r.shape_pt_lat])
-
-        features = []
-        for shape_id, coords in shapes.items():
-            if len(coords) < 2:
-                continue
-            features.append({
-                "type": "Feature",
-                "properties": shape_props[shape_id],
-                "geometry": {
-                    "type": "LineString",
-                    "coordinates": coords,
-                }
-            })
-
-        result = {"type": "FeatureCollection", "features": features}
-        with _railway_lines_cache_lock:
-            _railway_lines_cache[cache_key] = result
-        logger.info(f"railway/lines: {len(features)} lignes GTFS SNCF mises en cache")
-        return result
-
-    except Exception as e:
-        logger.error(f"Erreur API railway/lines: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/api/railway/shapes")
+@app.get("/api/railways/shapes")
 def get_railway_shapes(db: Session = Depends(get_db), detail: str = "high"):
     """Retourne les shapes GTFS des trips actifs (gzip, cache 2 min).
 
@@ -707,9 +437,11 @@ def get_railway_shapes(db: Session = Depends(get_db), detail: str = "high"):
                 JOIN rail_trips rt ON rt.trip_id = rp.trip_id
                 JOIN rail_shapes rs ON rs.shape_id = rt.shape_id
             ) f
-            WHERE f.shape_pt_sequence = f.min_seq
+            WHERE (f.shape_pt_sequence = f.min_seq
                OR f.shape_pt_sequence = f.max_seq
-               OR MOD(f.shape_pt_sequence, :keep_every) = 0
+               OR MOD(f.shape_pt_sequence, :keep_every) = 0)
+              AND f.shape_pt_lat BETWEEN 41.0 AND 51.5
+              AND f.shape_pt_lon BETWEEN -5.5 AND 10.0
             ORDER BY f.trip_id, f.shape_pt_sequence
         """), {"cutoff": cutoff, "keep_every": keep_every}).fetchall()
 
@@ -736,11 +468,179 @@ def get_railway_shapes(db: Session = Depends(get_db), detail: str = "high"):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-## Warmup désactivé — avec 4 workers, chaque warmup charge ~200K pts en mémoire,
-## ce qui cause des OOM en boucle. Le premier appel frontend peuplera le cache.
-# @app.on_event("startup")
-# def warmup_shapes_cache():
-#     ...
+@app.get("/api/stats")
+def get_stats(db: Session = Depends(get_db)):
+    """Retourne les statistiques globales de la carte pour les 3 réseaux.
+
+    Fenêtre temporelle : 2 dernières minutes pour les comptages et niveaux
+    de bruit, 10 dernières minutes pour le top 10 des zones les plus bruyantes.
+
+    Args:
+        db (Session): Session SQLAlchemy injectée par Depends.
+
+    Returns:
+        dict: Dictionnaire avec les champs suivants :
+            - aircraft_count (int) : avions en vol
+            - avg_noise_db / max_noise_db (float) : bruit aérien agrégé
+            - railway_train_count (int) : trains actifs
+            - railway_avg_noise_db / railway_max_noise_db (float) : bruit ferroviaire agrégé
+            - road_segment_count (int) : segments routiers avec données récentes
+            - road_avg_noise_db / road_max_noise_db (float) : bruit routier agrégé
+            - noisiest_zones (list) : top 10 zones aériennes les plus bruyantes
+            - timestamp (str) : horodatage ISO 8601
+    """
+    try:
+        two_minutes_ago = datetime.utcnow() - timedelta(minutes=2)
+        ten_minutes_ago = datetime.utcnow() - timedelta(minutes=10)
+        
+        # Nombre total d'avions dans les 2 dernières minutes
+        aircraft_count = db.query(func.count(func.distinct(AircraftPosition.icao24))).filter(
+            AircraftPosition.time > two_minutes_ago,
+            AircraftPosition.on_ground == False
+        ).scalar()
+        
+        # Niveau de bruit moyen et max (aérien)
+        noise_stats = db.query(
+            func.avg(AircraftNoiseLevel.noise_db).label("avg_noise"),
+            func.max(AircraftNoiseLevel.noise_db).label("max_noise")
+        ).filter(
+            AircraftNoiseLevel.time > two_minutes_ago
+        ).first()
+
+        # Bruit moyen et max ferroviaire + nombre de trains actifs
+        railway_noise_stats = db.query(
+            func.avg(RailwayNoiseLevel.noise_db).label("avg_noise"),
+            func.max(RailwayNoiseLevel.noise_db).label("max_noise")
+        ).filter(
+            RailwayNoiseLevel.time > two_minutes_ago
+        ).first()
+
+        railway_train_count = db.query(func.count(func.distinct(RailwayPosition.trip_id))).filter(
+            RailwayPosition.time > two_minutes_ago
+        ).scalar()
+
+        # Bruit moyen, max et nombre de segments routiers actifs
+        road_noise_stats = db.query(
+            func.avg(RoadNoiseLevel.noise_db).label("avg_noise"),
+            func.max(RoadNoiseLevel.noise_db).label("max_noise"),
+            func.count(func.distinct(RoadNoiseLevel.code_pme)).label("segment_count")
+        ).filter(
+            RoadNoiseLevel.time > two_minutes_ago
+        ).first()
+
+        # Zones les plus bruyantes (aérien)
+        noisiest_zones = db.query(
+            AircraftNoiseLevel.grid_id,
+            AircraftNoiseLevel.latitude,
+            AircraftNoiseLevel.longitude,
+            func.avg(AircraftNoiseLevel.noise_db).label("avg_noise")
+        ).filter(
+            AircraftNoiseLevel.time > ten_minutes_ago
+        ).group_by(
+            AircraftNoiseLevel.grid_id,
+            AircraftNoiseLevel.latitude,
+            AircraftNoiseLevel.longitude
+        ).order_by(
+            desc("avg_noise")
+        ).limit(10).all()
+        
+        noisiest_data = [
+            {
+                "grid_id": z.grid_id,
+                "latitude": z.latitude,
+                "longitude": z.longitude,
+                "avg_noise": float(z.avg_noise)
+            }
+            for z in noisiest_zones
+        ]
+        
+        return {
+            "aircraft_count": aircraft_count or 0,
+            "avg_noise_db": float(noise_stats.avg_noise) if noise_stats.avg_noise else 0.0,
+            "max_noise_db": float(noise_stats.max_noise) if noise_stats.max_noise else 0.0,
+            "railway_train_count": railway_train_count or 0,
+            "railway_avg_noise_db": float(railway_noise_stats.avg_noise) if railway_noise_stats and railway_noise_stats.avg_noise else 0.0,
+            "railway_max_noise_db": float(railway_noise_stats.max_noise) if railway_noise_stats and railway_noise_stats.max_noise else 0.0,
+            "road_segment_count": int(road_noise_stats.segment_count) if road_noise_stats and road_noise_stats.segment_count else 0,
+            "road_avg_noise_db": float(road_noise_stats.avg_noise) if road_noise_stats and road_noise_stats.avg_noise else 0.0,
+            "road_max_noise_db": float(road_noise_stats.max_noise) if road_noise_stats and road_noise_stats.max_noise else 0.0,
+            "noisiest_zones": noisiest_data,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    
+    except Exception as e:
+        logger.error(f"Erreur API: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+def _simplify_geom(geom: list, max_pts: int = 20) -> list:
+    """Réduit une géométrie OSM à max_pts points par sous-échantillonnage uniforme.
+
+    Conserve toujours le premier et le dernier point pour ne pas tronquer le tracé.
+
+    Args:
+        geom: Liste de coordonnées [[lon, lat], ...].
+        max_pts: Nombre maximum de points à conserver, défaut 20.
+
+    Returns:
+        La géométrie originale si elle a déjà ≤ max_pts points, sinon une
+        version allégée.
+    """
+    if not geom or len(geom) <= max_pts:
+        return geom
+    step = max(1, len(geom) // max_pts)
+    simplified = geom[::step]
+    if simplified[-1] != geom[-1]:
+        simplified.append(geom[-1])
+    return simplified
+
+
+@app.get("/api/noise/history")
+def get_noise_history(
+    grid_id: str,
+    hours: Optional[int] = 1,
+    db: Session = Depends(get_db)
+):
+    """Retourne la série temporelle du bruit pour une cellule de grille.
+
+    Retourne les données sur la période demandée. Utile pour afficher
+    l'évolution du bruit dans le temps pour une zone.
+
+    Args:
+        grid_id (str): Identifiant de grille au format "lat_lon"
+            (ex: "48.80_2.30").
+        hours (int): Nombre d'heures d'historique, défaut 1.
+        db (Session): Session SQLAlchemy injectée par Depends.
+
+    Returns:
+        dict: Dictionnaire avec 'grid_id', 'count' (int), et 'data'
+            (list de {time, noise_db, aircraft_count} triés chronologiquement).
+    """
+    try:
+        time_ago = datetime.utcnow() - timedelta(hours=hours)
+        
+        results = db.query(AircraftNoiseLevel).filter(
+            AircraftNoiseLevel.grid_id == grid_id,
+            AircraftNoiseLevel.time > time_ago
+        ).order_by(AircraftNoiseLevel.time.asc()).all()
+        
+        data = [
+            {
+                "time": r.time.isoformat(),
+                "noise_db": r.noise_db,
+                "aircraft_count": r.aircraft_count
+            }
+            for r in results
+        ]
+        
+        return {
+            "grid_id": grid_id,
+            "count": len(data),
+            "data": data
+        }
+    
+    except Exception as e:
+        logger.error(f"Erreur API: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.on_event("shutdown")

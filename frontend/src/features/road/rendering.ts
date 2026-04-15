@@ -1,7 +1,7 @@
 import type { MapRef } from 'react-map-gl/maplibre'
-import type { RoadSegment } from '../../hooks/useRoadData'
-import { ROAD_WIDTH_BY_VOIES, ROAD_BASE_WIDTH_PX, CORRIDOR_N_PASSES, LAT_REF_ROAD } from './constants'
-import { getRoadColor, calcCorridorHalfWidthPx, hexToRgb, interpolateColor } from './utils'
+import type { RoadsSegment } from '../../hooks/useRoadsData'
+import { CORRIDOR_N_PASSES, LAT_REF_ROAD, ROAD_BASE_WIDTH_PX, ROAD_WIDTH_BY_VOIES } from './constants'
+import { calcCorridorHalfWidthPx, getRoadColor, interpolateColor } from './utils'
 
 const MIN_PX_SQ = 4 // skip points < 2px de distance depuis le dernier dessiné
 const GREEN_51DB = '#22c55e' // couleur bord de halo (bruit minimal)
@@ -20,7 +20,7 @@ export interface RoadStyleCache {
  * Pré-calcule les couleurs et largeurs de trait pour chaque segment.
  * À appeler une seule fois quand roadData change.
  */
-export function precomputeRoadStyles(segments: RoadSegment[]): RoadStyleCache {
+export function precomputeRoadStyles(segments: RoadsSegment[]): RoadStyleCache {
   const colors = new Map<string, { color: string; lineWidth: number }>()
   for (const seg of segments) {
     const color = getRoadColor(seg.noise_db)
@@ -39,9 +39,9 @@ export function precomputeRoadStyles(segments: RoadSegment[]): RoadStyleCache {
  * @param zoom - Niveau de zoom courant
  * @param styleCache - Cache de styles pré-calculé (optionnel, recalcule si absent)
  */
-export function drawRoadSegments(
+export function drawRoadsSegments(
   ctx: CanvasRenderingContext2D,
-  segments: RoadSegment[],
+  segments: RoadsSegment[],
   map: MapRef,
   zoom: number,
   styleCache?: RoadStyleCache,

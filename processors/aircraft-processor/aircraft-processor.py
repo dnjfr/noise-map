@@ -51,7 +51,7 @@ class AircraftPosition(Base):
     aircraft_desc = Column(String(100))
     aircraft_category = Column(String(5))
 
-class NoiseLevel(Base):
+class AircraftNoiseLevel(Base):
     __tablename__ = "aircraft_noise_levels"
     
     time = Column(TIMESTAMP(timezone=True), primary_key=True)
@@ -368,7 +368,7 @@ def process_batch_and_calculate_noise(session, batch_data):
 
     Traite un lot de messages Kafka : ignore les avions au sol, calcule le
     bruit de chaque avion (NPD ou fallback), agrège par cellule de grille
-    (moyenne), et stocke un NoiseLevel par cellule dans la session SQLAlchemy.
+    (moyenne), et stocke un AircraftNoiseLevel par cellule dans la session SQLAlchemy.
     Les niveaux < 30 dB sont ignorés.
 
     Args:
@@ -412,7 +412,7 @@ def process_batch_and_calculate_noise(session, batch_data):
         avg_noise = data["total_noise"] / data["count"]
         lat, lon = data["coords"]
         
-        noise_level = NoiseLevel(
+        noise_level = AircraftNoiseLevel(
             time=datetime.utcnow(),
             latitude=lat,
             longitude=lon,

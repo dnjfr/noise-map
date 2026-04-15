@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo } from 'react'
 import { Marker, Popup } from 'react-map-gl/maplibre'
-import type { Train } from '../../hooks/useRailwayData'
+import type { Train } from '../../hooks/useRailwaysData'
 import { TRAIN_COLOR, TRAIN_ICON_SIZE } from './constants'
 import { buildRailwayPopupContent } from './utils'
 

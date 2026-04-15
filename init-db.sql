@@ -208,21 +208,6 @@ CREATE TABLE IF NOT EXISTS railway_routes_ref (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Référentiel officiel SNCF des formes des lignes du RFN (Réseau Ferré National)
--- Rempli par : python3 archives/railway/import_rfn_lines.py (make import-rfn-lines)
-CREATE TABLE IF NOT EXISTS railway_lines_rfn (
-    id          SERIAL PRIMARY KEY,
-    code_ligne  VARCHAR(10) NOT NULL,
-    libelle     TEXT,
-    mnemo       VARCHAR(20),
-    pk_debut    VARCHAR(20),
-    pk_fin      VARCHAR(20),
-    coords      JSONB NOT NULL,  -- [[lon, lat], ...] GeoJSON order
-    imported_at TIMESTAMPTZ DEFAULT NOW()
-);
-CREATE INDEX IF NOT EXISTS idx_railway_lines_rfn_mnemo ON railway_lines_rfn (mnemo);
-CREATE INDEX IF NOT EXISTS idx_railway_lines_rfn_code  ON railway_lines_rfn (code_ligne);
-
 -- ─── Tables GTFS SNCF ────────────────────────────────────────────────────────
 -- Remplies par : python3 archives/railway/import_gtfs.py
 -- Tables statiques (import unique, stables) : rail_stops, rail_routes, rail_shapes

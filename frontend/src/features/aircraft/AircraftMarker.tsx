@@ -1,8 +1,8 @@
 import React, { useCallback, useMemo } from 'react'
 import { Marker, Popup } from 'react-map-gl/maplibre'
-import type { Aircraft } from '../../hooks/useNoiseData'
-import { ICON_MIN, MAX_SIZE_BY_CATEGORY, DEFAULT_MAX_SIZE } from './constants'
-import { getAircraftSvg, buildPopupContent } from './utils'
+import type { Aircraft } from '../../hooks/useAircraftsData'
+import { DEFAULT_MAX_SIZE, ICON_MIN, MAX_SIZE_BY_CATEGORY } from './constants'
+import { buildPopupContent, getAircraftSvg } from './utils'
 
 export interface AircraftMarkerProps {
   icao: string

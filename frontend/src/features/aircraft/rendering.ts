@@ -1,7 +1,7 @@
 import type { MapRef } from 'react-map-gl/maplibre'
-import type { Aircraft } from '../../hooks/useNoiseData'
+import type { Aircraft } from '../../hooks/useAircraftsData'
 import { DB_LEVEL_COLOR_STOPS } from './constants'
-import { getNoiseReferenceDb, calcGroundNoise, calcNoiseRadius, hexToRgb, interpolateColor } from './utils'
+import { calcGroundNoise, calcNoiseRadius, getNoiseReferenceDb, hexToRgb, interpolateColor } from './utils'
 
 const LAT_REF = 46.6
 

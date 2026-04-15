@@ -30,7 +30,7 @@ DATABASE_URL = f"postgresql+psycopg://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT
 
 TOMTOM_API_KEY = os.getenv("TOMTOM_API_KEY", "")
 
-POLL_INTERVAL = 3600  # 1 heure
+POLL_INTERVAL = 300  # 5 minutes
 
 
 # Filtrage géographique : ne garder que les segments en France métropolitaine + Corse.
@@ -38,24 +38,29 @@ POLL_INTERVAL = 3600  # 1 heure
 _FRANCE_BBOXES = (
     # ── Côtes et frontières (petites boxes précises) ──────────────
     ( 1.5, 50.3,  2.5, 51.1),   # Côte nord Manche : Calais, Dunkerque, frontière belge
-    ( 1.5, 49.5,  3.2, 50.8),   # Hauts-de-France / Lille — frontière belge ~50.7°N
-    ( 3.2, 49.0,  4.0, 50.3),   # Picardie + Aisne — frontière belge ~50.0°N à 4°E
-    (-1.6, 49.2,-1.32, 49.6),   # Côte normande : Cherbourg
+    ( 1.5, 49.5,  3.2, 50.8),   # Hauts-de-France / Lille - frontière belge ~50.7°N
+    ( 3.2, 49.0,  4.0, 50.3),   # Picardie + Aisne - frontière belge ~50.0°N à 4°E
+    ( 4.0, 48.8,  4.86, 50.0),  # Charleville Mezières - Chalon en Champagne
+    ( 4.9, 48.8,  5.2, 49.7),   # Sedan
+    ( 5.2, 48.8,  6.55, 49.5),  # Thionville - Metz
+    (-1.7, 49.2, -1.32, 49.7),  # Côte normande : Cherbourg
     (-1.3, 49.0,  0.5, 49.3),   # Cotentin : Caen
-    ( 0.5, 49.0,  1.3, 49.9),   # Normandie : Rouen, Evreux, Dieppe
-    ( 4.0, 48.5,  6.3, 49.8),   # Lorraine + Ardennes — sous Belgique/Luxembourg
-    ( 6.3, 47.5,  7.85, 49.5),  # Alsace — à l'ouest du Rhin ; Strasbourg inclus
-    ( 5.5, 46.5,  6.8, 47.8),   # Doubs + Jura — clip frontière suisse
-    ( 5.5, 45.5,  7.0, 46.7),   # Savoie + Ain — clip Suisse/Italie
-    ( 5.5, 44.5,  7.5, 45.7),   # Hautes-Alpes + Alpes-de-Haute-Provence — clip Italie
-    ( 6.8, 43.5,  7.55, 44.5),  # Alpes-Maritimes — Menton dernier point français
-    ( 2.6, 42.5,  4.3, 43.8),   # Côte médit. Roussillon–Languedoc : Perpignan
-    ( 4.3, 43.0,  7.1, 44.0),   # Côte médit. Marseille–Var : Toulon, Marseille
-    (-1.9, 43.0,  0.0, 44.2),   # Pyrénées ouest — Pays Basque + Béarn : Hendaye
-    ( 0.0, 42.5,  3.2, 44.2),   # Pyrénées est — Ariège + PO
+    ( 0.0, 49.0,  1.3, 49.9),   # Normandie : Rouen, Evreux, Dieppe
+    ( 4.0, 48.5, 6.41, 49.5),   # Lorraine + Ardennes - sous Belgique/Luxembourg
+    ( 6.4, 48.5,  7.8, 49.2),   # Alsace - à l'ouest du Rhin ; Strasbourg inclus
+    ( 6.4, 47.6,  7.7, 48.5),   # Alsace - Epinal, Mulhouse, Montbéliar, Belfort
+    ( 5.5, 46.5,  6.3, 47.8),   # Doubs + Jura - clip frontière suisse
+    ( 5.5, 45.5,  6.8, 46.13),  # Savoie : Annecy, Chambery
+    ( 6.31, 46.1,  6.8, 46.4),  # Savoie : Thonon les Bains
+    ( 5.8, 43.0, 6.86, 44.5),   # Hautes-Alpes + Alpes-de-Haute-Provence
+    ( 6.86, 43.5, 7.49, 44.12), # Alpes-Maritimes - Cannes, Nice, Monaco
+    ( 4.3, 43.0, 6.9, 44.15),   # Côte médit. Marseille–Var : Toulon, Marseille
+    (-1.53, 43.0, 3.8, 43.49),  # Bande des Pyrénées - Pays Basque + Béarn : Hendaye, Ariège + PO
+    ( 3.12, 43.5, 4.3, 44.1),   # Montpellier, Alès
+    ( 1.79, 42.4, 3.17, 43.0),  # Perpignan
+    ( 0.0, 43.4,  3.2, 44.2),   # Toulouse, Montauban, Millau
     (-1.9, 43.5, -0.5, 46.0),   # Côte atlantique Landes + Gironde : Bayonne
     (-2.5, 45.5, -0.2, 47.5),   # Côte atlantique Vendée + Charente : La Rochelle
-    (-5.1, 47.2, -1.8, 49.0),   # Bretagne : Brest, clip Atlantique + Manche
     (-4.8, 48.0, -1.8, 48.7),   # Bretagne : Brest
     (-4.4, 47.8, -1.8, 48.0),   # Bretagne : Quimpert, Concarneau
     (-3.5, 47.6, -1.8, 47.8),   # Bretagne : Lorient, Vannes
@@ -64,7 +69,7 @@ _FRANCE_BBOXES = (
     (-2.0, 47.0,  3.5, 49.5),   # Normandie intérieure + Pays de Loire + IDF + Centre-Val de Loire
     ( 3.5, 47.0,  6.5, 49.0),   # Grand Est : Champagne + Lorraine intérieure + Bourgogne nord
     (-1.5, 44.5,  4.5, 47.0),   # Centre-France : Auvergne + Limousin + Berry + Bourgogne sud
-    ( 4.0, 44.5,  6.5, 47.0),   # Rhône-Alpes intérieur : Lyon
+    ( 4.0, 44.5,  5.8, 47.0),   # Rhône-Alpes intérieur : Lyon
     (-1.0, 43.5,  3.0, 45.5),   # Sud-Ouest intérieur : Lot + Aveyron + Cantal + Gers + Toulousain
     ( 3.0, 43.5,  6.5, 45.5),   # Midi intérieur : Ardèche + Gard + Vaucluse + Drôme + Provence
     # ── Corse ─────────────────────────────────────────────────────
@@ -329,7 +334,8 @@ def parse_tomtom_segments(features: list[dict]) -> dict:
         lat0, lon0       = coords[0]
         lat_fin, lon_fin = coords[-1]
 
-        if not _is_in_france(lat0, lon0):
+        lat_mid, lon_mid = coords[len(coords) // 2]
+        if not (_is_in_france(lat0, lon0) and _is_in_france(lat_mid, lon_mid) and _is_in_france(lat_fin, lon_fin)):
             continue
 
         # DEBUG — valide que les coords sont bien en WGS84 après conversion

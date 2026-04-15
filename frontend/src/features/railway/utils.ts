@@ -1,5 +1,5 @@
-import type { Train } from '../../hooks/useRailwayData'
-import { RAILWAY_NOISE_REF, DEFAULT_RAILWAY_NOISE_REF } from './constants'
+import type { Train } from '../../hooks/useRailwaysData'
+import { DEFAULT_RAILWAY_NOISE_REF, RAILWAY_NOISE_REF } from './constants'
 
 /** Extrait le type de service depuis le trip_id SNCF (ex: "TER", "TGV", "IC") */
 function extractServiceType(tripId: string): string {
@@ -37,6 +37,13 @@ export function calcRailwayNoiseRadius(lRef: number, vRef: number, speedKmh: num
   return 25 * Math.pow(10, (noiseAt25m - thresholdDb) / 20)
 }
 
+/**
+ * Génère le contenu HTML de la popup MapLibre pour un train.
+ * Affiche : type de service + numéro (ex: "TER 876542"), ligne, arrêts précédent/suivant,
+ * vitesse, retard en minutes, et bruit estimé à 25m (omis si train à l'arrêt).
+ * @param train - Données du train issues de useRailwaysData
+ * @returns Chaîne HTML à injecter dans une Popup MapLibre
+ */
 export function buildRailwayPopupContent(train: Train): string {
   const delay = train.delay_seconds
   const delayStr = delay > 0 ? `+${Math.round(delay / 60)} min` : 'à l\'heure'

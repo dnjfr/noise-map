@@ -4,6 +4,7 @@ interface Props {
   lastUpdate: Date | null
 }
 
+/** Bandeau titre avec badge "Live" et horodatage de la dernière mise à jour des avions. */
 export default React.memo(function Header({ lastUpdate }: Props) {
   const timeStr = lastUpdate
     ? lastUpdate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })

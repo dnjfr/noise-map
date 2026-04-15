@@ -1,5 +1,7 @@
 import React from 'react'
 
+/** Légende fixe des niveaux de bruit (4 paliers : 51 / 60 / 70 / 80 dB).
+ *  Couleurs synchronisées avec DB_LEVEL_COLOR_STOPS (aircraft/constants.ts). */
 const items = [
   { color: '#759285', label: 'Négligeable (51–60 dB)' },
   { color: '#eab308', label: 'Perceptible (> 60 dB)' },

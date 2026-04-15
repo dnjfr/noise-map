@@ -168,14 +168,14 @@ def process_batch(session, batch):
         if noise_db is None:
             dropped += 1
             continue
-        road_noise = RoadNoiseLevel(
+        noise_level = RoadNoiseLevel(
             time=datetime.utcnow(),
             code_pme=data["code_pme"],
             noise_db=noise_db,
             traffic_flow=flow,
             average_speed=speed,
         )
-        session.add(road_noise)
+        session.add(noise_level)
         stored += 1
     if dropped:
         logger.warning(f"  {dropped} segments ignorés (flow ET speed absents simultanément)")

@@ -21,8 +21,14 @@ export interface Train {
   route_long_name?: string
 }
 
-export function useRailwayData(): { railwayData: Train[]; lastUpdate: Date | null } {
-  const [railwayData, setRailwayData] = useState<Train[]>([])
+/**
+ * Hook React exposant les positions temps-réel des trains (GTFS-RT).
+ * Poll /api/railways/positions toutes les 30 secondes.
+ *
+ * @returns { railwaysData, lastUpdate }
+ */
+export function useRailwaysData(): { railwaysData: Train[]; lastUpdate: Date | null } {
+  const [railwaysData, setRailwaysData] = useState<Train[]>([])
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null)
 
   const fetchCountRef = useRef(0)
@@ -32,13 +38,13 @@ export function useRailwayData(): { railwayData: Train[]; lastUpdate: Date | nul
     const t0 = performance.now()
     try {
       const response = isFirst
-        ? await perfFetch('railway-current', `http://${API_URL}:8000/api/railway/current`)
-        : await fetch(`http://${API_URL}:8000/api/railway/current`)
+        ? await perfFetch('railway-current', `http://${API_URL}:8000/api/railways/positions`)
+        : await fetch(`http://${API_URL}:8000/api/railways/positions`)
       if (!response.ok) return
       const result = isFirst
         ? await perfJson<any>('railway-current', response)
         : await response.json()
-      setRailwayData(result.data || [])
+      setRailwaysData(result.data || [])
       setLastUpdate(new Date())
       if (isFirst) perfDone('railway-current', result.data?.length ?? 0, t0)
     } catch (error) {
@@ -52,5 +58,5 @@ export function useRailwayData(): { railwayData: Train[]; lastUpdate: Date | nul
     return () => clearInterval(interval)
   }, [fetchData])
 
-  return { railwayData, lastUpdate }
+  return { railwaysData, lastUpdate }
 }

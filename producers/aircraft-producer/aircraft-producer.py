@@ -61,7 +61,10 @@ def create_kafka_producer():
 
 
 def fetch_zone(lat, lon, radius):
-    """Interroge l'API adsb.one pour récupérer tous les avions dans un rayon donné autour d'un point géographique.
+    """Interroge l'API adsb.one pour récupérer tous les avions dans un rayon donné.
+
+    En cas de 429 (rate limit) sur adsb.one, bascule automatiquement sur airplanes.live
+    (API identique). Retourne une liste vide si les deux sources échouent.
 
     Args:
         lat (float): Latitude du centre.
@@ -69,17 +72,25 @@ def fetch_zone(lat, lon, radius):
         radius (int): Rayon en nautical miles.
 
     Returns:
-        list: Liste de dicts représentant les avions (format adsb.one), liste vide en cas d'erreur.
+        list: Liste de dicts représentant les avions (format adsb.one/airplanes.live).
     """
-    url = f"https://api.adsb.one/v2/point/{lat}/{lon}/{radius}"
-    try:
-        response = requests.get(url, timeout=15)
-        response.raise_for_status()
-        data = response.json()
-        return data.get("ac", [])
-    except Exception as e:
-        logger.error(f"Erreur zone ({lat}, {lon}): {e}")
-        return []
+    primary_url  = f"https://api.adsb.one/v2/point/{lat}/{lon}/{radius}"
+    fallback_url = f"https://api.airplanes.live/v2/point/{lat}/{lon}/{radius}"
+    
+    for url in (primary_url, fallback_url):
+        try:
+            response = requests.get(url, timeout=15)
+            if response.status_code == 429 and url == primary_url:
+                logger.warning(f"429 adsb.one zone ({lat}, {lon}) — bascule sur airplanes.live")
+                continue
+            response.raise_for_status()
+            data = response.json()
+            return data.get("ac", [])
+        except Exception as e:
+            logger.error(f"Erreur zone ({lat}, {lon}) [{url}]: {e}")
+            if url == primary_url:
+                continue
+    return []
 
 
 def filter_and_publish(producer, aircraft_list, label=""):

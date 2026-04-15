@@ -212,6 +212,10 @@ db-consult:
 	docker compose up -d timescaledb
 	docker compose up -d pgadmin
 
+db-start:
+	@echo "🐘 Démarrage de PostgreSQL et PGAdmin..."
+	docker compose up -d timescaledb
+
 test-api:
 	@echo "🧪 Test de l'API..."
 	@echo ""
@@ -235,9 +239,6 @@ import-icao:  ## Extrait le mapping ICAO → modèles depuis le PDF FAA JO 7360.
 
 import-patterns:  ## Charge les règles de correspondance ICAO → madb
 	python3 aircraft-data/import_icao_patterns.py
-
-import-rfn-lines:  ## Importe les formes des lignes du RFN SNCF (archives/railway/formes-des-lignes-du-rfn.geojson)
-	python3 archives/railway/import_rfn_lines.py
 
 import-gtfs:  ## Importe le GTFS SNCF complet (statique + temporel) depuis archives/railway/pfaedle/gtfs-workdir/
 	python3 archives/railway/import_gtfs.py
@@ -267,7 +268,7 @@ db-init:
 
 # --- Backup / Restore ---
 
-BACKUP_DIR := ./backup_db
+BACKUP_DIR := ./db_backup
 
 # Usage: make db-backup
 db-backup:
@@ -283,7 +284,6 @@ db-backup:
 		-t rail_trips \
 		-t rail_stop_times \
 		-t rail_calendar \
-		-t railway_lines_rfn \
 		-t railway_routes_ref \
 		-t road_segments_ref \
 		| gzip > $(BACKUP_DIR)/noise_map_$$(date +%Y%m%d).sql.gz

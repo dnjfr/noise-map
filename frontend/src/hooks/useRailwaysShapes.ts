@@ -10,7 +10,15 @@ function parseShapes(json: Record<string, ShapePoints>): Map<string, ShapePoints
   return new Map(Object.entries(json))
 }
 
-export function useRailwayShapes() {
+/**
+ * Hook React exposant les shapes GTFS des trips actifs.
+ * Au montage, charge low et high en parallèle (le premier arrivé s'affiche immédiatement).
+ * Rafraîchissement automatique toutes les 2 minutes (aligné cache serveur TTL=2 min).
+ * Expose refreshShapes() pour forcer un rechargement immédiat (ex : trip inconnu détecté).
+ *
+ * @returns { shapesData: Map<trip_id, ShapePoints[]>, refreshShapes }
+ */
+export function useRailwaysShapes() {
   const [shapesData, setShapesData] = useState<Map<string, ShapePoints>>(new Map())
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -18,7 +26,7 @@ export function useRailwayShapes() {
     const label = `railway-shapes-${detail}`
     const t0 = performance.now()
     try {
-      const res = await perfFetch(label, `http://${API_URL}:8000/api/railway/shapes?detail=${detail}`)
+      const res = await perfFetch(label, `http://${API_URL}:8000/api/railways/shapes?detail=${detail}`)
       if (!res.ok) return null
       const json: Record<string, ShapePoints> = await perfJson(label, res)
       const entries = Object.entries(json)

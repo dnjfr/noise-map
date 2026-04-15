@@ -1,36 +1,30 @@
 import React, { useState } from 'react'
-import type { Stats } from '../hooks/useNoiseData'
-import type { RoadSegment } from '../hooks/useRoadData'
+import type { Stats } from '../hooks/useAircraftsData'
 
 interface Props {
   stats: Stats | null
-  roadData: RoadSegment[]
 }
 
-export default React.memo(function StatsPanel({ stats, roadData }: Props) {
-  const avgRoadNoise = roadData.length > 0
-    ? roadData.reduce((sum, s) => sum + s.noise_db, 0) / roadData.length
-    : null
-  const maxRoadNoise = roadData.length > 0
-    ? Math.max(...roadData.map(s => s.noise_db))
-    : null
-
+/** Panneau de statistiques en 3 sections repliables (Aérien / Ferré / Routier).
+ *  Affiche comptages et niveaux de bruit moyen/max depuis l'endpoint /api/stats. */
+export default React.memo(function StatsPanel({ stats }: Props) {
+  const hasStats = stats != null && typeof stats.aircraft_count === 'number'
   return (
     <div className="flex flex-col gap-1.5">
       <Section title="Aérien">
-        <StatRow label="Avions détectés" value={stats ? String(stats.aircraft_count) : '—'} />
-        <StatRow label="Bruit moyen" value={stats ? `${stats.avg_noise_db.toFixed(1)} dB` : '— dB'} />
-        <StatRow label="Bruit maximum" value={stats ? `${stats.max_noise_db.toFixed(1)} dB` : '— dB'} />
+        <StatRow label="Avions détectés" value={hasStats ? String(stats.aircraft_count) : '—'} />
+        <StatRow label="Bruit moyen" value={hasStats && stats.avg_noise_db ? `${stats.avg_noise_db.toFixed(1)} dB` : '— dB'} />
+        <StatRow label="Bruit maximum" value={hasStats && stats.max_noise_db ? `${stats.max_noise_db.toFixed(1)} dB` : '— dB'} />
       </Section>
       <Section title="Ferré">
-        <StatRow label="Trains détectés" value={stats ? String(stats.railway_train_count) : '—'} />
-        <StatRow label="Bruit moyen" value={stats?.railway_avg_noise_db ? `${stats.railway_avg_noise_db.toFixed(1)} dB` : '— dB'} />
-        <StatRow label="Bruit maximum" value={stats?.railway_max_noise_db ? `${stats.railway_max_noise_db.toFixed(1)} dB` : '— dB'} />
+        <StatRow label="Trains détectés" value={hasStats ? String(stats.railway_train_count) : '—'} />
+        <StatRow label="Bruit moyen" value={hasStats && stats.railway_avg_noise_db ? `${stats.railway_avg_noise_db.toFixed(1)} dB` : '— dB'} />
+        <StatRow label="Bruit maximum" value={hasStats && stats.railway_max_noise_db ? `${stats.railway_max_noise_db.toFixed(1)} dB` : '— dB'} />
       </Section>
       <Section title="Routier">
-        <StatRow label="Segments détectés" value={roadData.length > 0 ? String(roadData.length) : '—'} />
-        <StatRow label="Bruit moyen" value={avgRoadNoise !== null ? `${avgRoadNoise.toFixed(1)} dB` : '— dB'} />
-        <StatRow label="Bruit maximum" value={maxRoadNoise !== null ? `${maxRoadNoise.toFixed(1)} dB` : '— dB'} />
+        <StatRow label="Segments détectés" value={hasStats ? String(stats.road_segment_count) : '—'} />
+        <StatRow label="Bruit moyen" value={hasStats && stats.road_avg_noise_db ? `${stats.road_avg_noise_db.toFixed(1)} dB` : '— dB'} />
+        <StatRow label="Bruit maximum" value={hasStats && stats.road_max_noise_db ? `${stats.road_max_noise_db.toFixed(1)} dB` : '— dB'} />
       </Section>
     </div>
   )

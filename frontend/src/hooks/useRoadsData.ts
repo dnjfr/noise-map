@@ -5,7 +5,7 @@ const API_URL = import.meta.env.VITE_API_URL
 const FAST_INTERVAL = 3000   // 3s pendant le chargement initial
 const SLOW_INTERVAL = 30000  // 30s une fois les données stables
 
-export interface RoadSegment {
+export interface RoadsSegment {
   code_pme: string
   axe: string
   lat_deb: number
@@ -20,12 +20,13 @@ export interface RoadSegment {
 }
 
 /**
- * Hook React pour récupérer les données de bruit routier.
- * Polling /api/road/current toutes les 30s.
- * @returns { roadData, lastUpdate }
+ * Hook React exposant les segments routiers avec leur niveau de bruit (HERE Traffic).
+ * Polling adaptatif sur /api/roads/segments_noise : 3s pendant le chargement initial,
+ * puis 30s une fois les données stabilisées (3 polls consécutifs sans changement de comptage).
+ * @returns { roadsData, lastUpdate }
  */
-export function useRoadData(): { roadData: RoadSegment[]; lastUpdate: Date | null } {
-  const [roadData, setRoadData] = useState<RoadSegment[]>([])
+export function useRoadsData(): { roadsData: RoadsSegment[]; lastUpdate: Date | null } {
+  const [roadsData, setRoadsData] = useState<RoadsSegment[]>([])
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null)
   const prevCountRef = useState(0)
 
@@ -36,13 +37,13 @@ export function useRoadData(): { roadData: RoadSegment[]; lastUpdate: Date | nul
     const t0 = performance.now()
     try {
       const response = isFirst
-        ? await perfFetch('road', `http://${API_URL}:8000/api/road/current`)
-        : await fetch(`http://${API_URL}:8000/api/road/current`)
+        ? await perfFetch('road', `http://${API_URL}:8000/api/roads/segments_noise`)
+        : await fetch(`http://${API_URL}:8000/api/roads/segments_noise`)
       if (!response.ok) return
       const result = isFirst
         ? await perfJson<any>('road', response)
         : await response.json()
-      setRoadData(result.data || [])
+      setRoadsData(result.data || [])
       setLastUpdate(new Date())
       const count = (result.data || []).length
       if (isFirst) perfDone('road', count, t0)
@@ -77,5 +78,5 @@ export function useRoadData(): { roadData: RoadSegment[]; lastUpdate: Date | nul
     return () => clearTimeout(intervalId)
   }, [fetchData])
 
-  return { roadData, lastUpdate }
+  return { roadsData, lastUpdate }
 }

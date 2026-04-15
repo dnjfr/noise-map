@@ -1,5 +1,5 @@
-import { ROAD_DB_LEVEL_COLOR_STOPS, CORRIDOR_REF_DIST_M, CORRIDOR_MAX_HALF_WIDTH_PX } from './constants'
-import type { RoadSegment } from '../../hooks/useRoadData'
+import type { RoadsSegment } from '../../hooks/useRoadsData'
+import { CORRIDOR_MAX_HALF_WIDTH_PX, CORRIDOR_REF_DIST_M, ROAD_DB_LEVEL_COLOR_STOPS } from './constants'
 
 export function hexToRgb(hex: string): [number, number, number] {
   const hexValue = parseInt(hex.slice(1), 16)
@@ -16,9 +16,12 @@ export function interpolateColor(hexA: string, hexB: string, t: number): string 
 }
 
 /**
- * Retourne la couleur hex correspondant au niveau de bruit routier.
- * @param noise_db - Niveau de bruit en dB(A)
- * @returns Couleur au format hexadécimal (#RRGGBB)
+ * Calcule la demi-largeur en pixels du corridor de bruit d'un segment routier.
+ * Propagation sphérique depuis CORRIDOR_REF_DIST_M (25m) : 20×log₁₀(dist/25).
+ * Plafonnée à CORRIDOR_MAX_HALF_WIDTH_PX pour éviter des corridors démesurés aux bas zooms.
+ * @param noise_db - Niveau de bruit du segment en dB(A)
+ * @param metersPerPixel - Échelle courante de la carte (mètres par pixel CSS)
+ * @returns Demi-largeur du corridor en pixels CSS
  */
 export function calcCorridorHalfWidthPx(noise_db: number, metersPerPixel: number): number {
   const halfWidthM = CORRIDOR_REF_DIST_M * Math.pow(10, (noise_db - 51) / 20)
@@ -27,7 +30,7 @@ export function calcCorridorHalfWidthPx(noise_db: number, metersPerPixel: number
 
 /** Convertit roadData en GeoJSON FeatureCollection pour les layers MapLibre.
  * corridor_width_m = diamètre physique du corridor de bruit (source linéaire, -3dB/doublement). */
-export function getRoadGeoJSON(roadData: RoadSegment[]) {
+export function getRoadGeoJSON(roadData: RoadsSegment[]) {
   if (roadData.length === 0) return null
   return {
     type: 'FeatureCollection' as const,

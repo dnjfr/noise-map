@@ -12,5 +12,6 @@ osmnx_cache
 *.json
 __pycache__
 .rtk
-backup_db/*
-!backup_db/.gitkeep
+db_backup/*
+!db_backup/.gitkeep
+debug

@@ -1,4 +1,8 @@
-export const RAILWAY_LINE_COLOR = '#c4bebe'
+export const RAILWAY_LINE_COLORS: Record<string, string> = {
+  grey: '#c4bebe',
+  dark: '#a09898',
+  light: '#6b6060',
+}
 export const RAILWAY_LINE_WIDTH = 1.5
 export const RAILWAY_LINE_OPACITY = 0.9
 

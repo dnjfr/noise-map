@@ -1,5 +1,5 @@
-import type { Aircraft } from '../../hooks/useNoiseData'
-import { NOISE_REFERENCE_DB_BY_CATEGORY, DB_LEVEL_COLOR_STOPS } from './constants'
+import type { Aircraft } from '../../hooks/useAircraftsData'
+import { DB_LEVEL_COLOR_STOPS, NOISE_REFERENCE_DB_BY_CATEGORY } from './constants'
 
 /**
  * Retourne le niveau de bruit de référence Lref en dB(A) pour une catégorie d'avion ICAO.

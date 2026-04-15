@@ -2,50 +2,56 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Map as MapGL, Source, Layer } from 'react-map-gl/maplibre'
 import type { MapRef } from 'react-map-gl/maplibre'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import type { Aircraft } from '../hooks/useNoiseData'
-import type { RoadSegment } from '../hooks/useRoadData'
-import type { Train } from '../hooks/useRailwayData'
+import type { Aircraft } from '../hooks/useAircraftsData'
+import type { RoadsSegment } from '../hooks/useRoadsData'
+import type { Train } from '../hooks/useRailwaysData'
 import { ANIMATION_DURATION, EARTH_RADIUS, FRAME_INTERVAL } from '../features/aircraft/constants'
-import { TRAIN_SLIDE_DURATION } from '../features/railway/constants'
+import { TRAIN_SLIDE_DURATION, RAILWAY_LINE_COLORS } from '../features/railway/constants'
 import type { AnimData } from '../features/aircraft/constants'
 import type { TrainAnimData } from '../features/railway/constants'
 import { projectOnPolyline, posAtDist, headingAtDist } from '../features/railway/polyline'
 import { drawHalos } from '../features/aircraft/rendering'
 import { drawRailwayHalos } from '../features/railway/rendering'
 import AircraftMarker from '../features/aircraft/AircraftMarker'
-import { railwayLineLayer } from '../features/railway/maplibre-layers'
+import { getRailwayLineLayer } from '../features/railway/maplibre-layers'
 import TrainMarker from '../features/railway/TrainMarker'
 import { roadHaloOuter, roadHaloMid, roadHaloInner, roadCoreLayer } from '../features/road/maplibre-layers'
 import { getRoadGeoJSON } from '../features/road/utils'
 
 interface Props {
-  aircraftData: Aircraft[]
-  roadData: RoadSegment[]
-  railwayData: Train[]
-  railwayShapes: Map<string, [number, number, number][]>
-  showAircraft: boolean
+  aircraftsData: Aircraft[]
+  roadsData: RoadsSegment[]
+  railwaysData: Train[]
+  railwaysShapes: Map<string, [number, number, number][]>
+  showAircrafts: boolean
   showRoads: boolean
   showRailways: boolean
+  mapStyleKey: MapStyleKey
 }
 
 const MAPTILER_KEY = import.meta.env.VITE_MAPTILER_API
-// Map dark-matter
-// const MAP_STYLE = `https://api.maptiler.com/maps/019cbf29-a831-7ff4-b316-7788daaa3cf8/style.json?key=${MAPTILER_KEY}`
-// Map winter
-// const MAP_STYLE = `https://api.maptiler.com/maps/winter-v4/style.json?key=${MAPTILER_KEY}`
-// Map winter custom
-const MAP_STYLE = `https://api.maptiler.com/maps/019ce31a-bd4b-7f1b-973a-96f15b8cc90c/style.json?key=${MAPTILER_KEY}`
 
+export const MAP_STYLES = {
+  dark: `https://api.maptiler.com/maps/019d7854-60c5-7ec5-b93e-686767064756/style.json?key=${MAPTILER_KEY}`,
+  grey: `https://api.maptiler.com/maps/019ce31a-bd4b-7f1b-973a-96f15b8cc90c/style.json?key=${MAPTILER_KEY}`,
+  light: `https://api.maptiler.com/maps/019d7871-e26a-70c9-82c0-f40f23224319/style.json?key=${MAPTILER_KEY}`,
+} as const
+
+export type MapStyleKey = keyof typeof MAP_STYLES
+
+// Zoom minimum et maximum de la carte (augmenter le zoom consomme des crédits Maptiler)
 const MIN_ZOOM = 6
-const MAX_ZOOM = 14
+const MAX_ZOOM = 11
+
+// Latitude sur laquelle est centrée la map
 const LAT_REF = 46.6
 
 /**
  * Composant principal de la carte. Gère la boucle RAF d'animation des positions, le canvas des halos, et la synchronisation des avions.
- * @param aircraftData - Liste des avions à afficher sur la carte
+ * @param aircraftsData - Liste des avions à afficher sur la carte
  * @returns Composant React avec carte interactive et halos de bruit
  */
-export default React.memo(function NoiseMap({ aircraftData, roadData, railwayData, railwayShapes, showAircraft, showRoads, showRailways }: Props) {
+export default React.memo(function NoiseMap({ aircraftsData, roadsData, railwaysData, railwaysShapes, showAircrafts, showRoads, showRailways, mapStyleKey }: Props) {
   const mapRef = useRef<MapRef>(null)
 
   // Toutes les données "chaudes" en ref — jamais de setState dans la boucle RAF
@@ -74,13 +80,17 @@ export default React.memo(function NoiseMap({ aircraftData, roadData, railwayDat
 
   const rafRef = useRef<number | null>(null)
 
-  const roadGeoJSON = useMemo(() => getRoadGeoJSON(roadData), [roadData])
+  const roadGeoJSON = useMemo(() => getRoadGeoJSON(roadsData), [roadsData])
+  const railwayLineLayer = useMemo(
+    () => getRailwayLineLayer(RAILWAY_LINE_COLORS[mapStyleKey] ?? RAILWAY_LINE_COLORS.grey),
+    [mapStyleKey],
+  )
 
   // Convertir les shapes GTFS des trips actifs en GeoJSON pour affichage
   const railwayGeoJSON = useMemo(() => {
-    if (railwayShapes.size === 0) return null
+    if (railwaysShapes.size === 0) return null
     const features: GeoJSON.Feature[] = []
-    for (const [tripId, shape] of railwayShapes) {
+    for (const [tripId, shape] of railwaysShapes) {
       if (shape.length < 2) continue
       features.push({
         type: 'Feature',
@@ -93,7 +103,7 @@ export default React.memo(function NoiseMap({ aircraftData, roadData, railwayDat
     }
     if (features.length === 0) return null
     return { type: 'FeatureCollection' as const, features }
-  }, [railwayShapes])
+  }, [railwaysShapes])
 
   // Nettoyage du canvas avion à l'unmount
   useEffect(() => {
@@ -105,8 +115,8 @@ export default React.memo(function NoiseMap({ aircraftData, roadData, railwayDat
 
   // Visibilité canvas avions
   useEffect(() => {
-    if (canvasRef.current) canvasRef.current.style.display = showAircraft ? 'block' : 'none'
-  }, [showAircraft])
+    if (canvasRef.current) canvasRef.current.style.display = showAircrafts ? 'block' : 'none'
+  }, [showAircrafts])
 
   // Visibilité canvas trains
   useEffect(() => {
@@ -117,9 +127,9 @@ export default React.memo(function NoiseMap({ aircraftData, roadData, railwayDat
   // Quand les shapes arrivent (chargement initial ou refresh 5 min), créer les animations
   // pour les trains déjà connus qui n'avaient pas encore de shape (race condition).
   useEffect(() => {
-    railwayShapesRef.current = railwayShapes
+    railwayShapesRef.current = railwaysShapes
     for (const [tripId, train] of railwayDataRef.current) {
-      const shape = railwayShapes.get(tripId)
+      const shape = railwaysShapes.get(tripId)
       if (!shape || shape.length < 2) continue
       // Ne pas écraser une animation shape déjà valide (Infinity = fallback heading, à remplacer)
       const existing = railwayAnimDataRef.current.get(tripId)
@@ -136,7 +146,7 @@ export default React.memo(function NoiseMap({ aircraftData, roadData, railwayDat
         baseLng: train.longitude,
       })
     }
-  }, [railwayShapes])
+  }, [railwaysShapes])
 
   // Boucle RAF globale unique — met à jour toutes les positions, une seule fois par frame
   useEffect(() => {
@@ -245,7 +255,7 @@ export default React.memo(function NoiseMap({ aircraftData, roadData, railwayDat
 
   // Synchronisation des avions depuis les props
   useEffect(() => {
-    const currentIcaos = new Set(aircraftData.map(a => a.icao24))
+    const currentIcaos = new Set(aircraftsData.map(a => a.icao24))
 
     // Supprimer les avions disparus
     for (const icao of aircraftRef.current.keys()) {
@@ -257,7 +267,7 @@ export default React.memo(function NoiseMap({ aircraftData, roadData, railwayDat
     }
 
     // Ajouter/mettre à jour
-    for (const aircraft of aircraftData) {
+    for (const aircraft of aircraftsData) {
       const prev = aircraftRef.current.get(aircraft.icao24)
       aircraftRef.current.set(aircraft.icao24, aircraft)
 
@@ -275,11 +285,11 @@ export default React.memo(function NoiseMap({ aircraftData, roadData, railwayDat
         })
       }
     }
-  }, [aircraftData])
+  }, [aircraftsData])
 
   // Sync train positions from props
   useEffect(() => {
-    const currentTrips = new Set(railwayData.map(t => t.trip_id))
+    const currentTrips = new Set(railwaysData.map(t => t.trip_id))
 
     for (const tid of railwayDataRef.current.keys()) {
       if (!currentTrips.has(tid)) {
@@ -289,7 +299,7 @@ export default React.memo(function NoiseMap({ aircraftData, roadData, railwayDat
       }
     }
 
-    for (const train of railwayData) {
+    for (const train of railwaysData) {
       railwayDataRef.current.set(train.trip_id, train)
 
       if (!railwayPositionsRef.current.has(train.trip_id)) {
@@ -334,7 +344,7 @@ export default React.memo(function NoiseMap({ aircraftData, roadData, railwayDat
         })
       }
     }
-  }, [railwayData])
+  }, [railwaysData])
 
   /**
    * Crée et insère le canvas HTML des halos avion au-dessus du canvas WebGL de MapLibre.
@@ -417,7 +427,7 @@ export default React.memo(function NoiseMap({ aircraftData, roadData, railwayDat
       ref={mapRef}
       initialViewState={{ longitude: 1.888334, latitude: LAT_REF, zoom: 6 }}
       style={{ width: '100vw', height: '100vh' }}
-      mapStyle={MAP_STYLE}
+      mapStyle={MAP_STYLES[mapStyleKey]}
       minZoom={MIN_ZOOM}
       maxZoom={MAX_ZOOM}
       onLoad={initCanvas}
@@ -426,6 +436,7 @@ export default React.memo(function NoiseMap({ aircraftData, roadData, railwayDat
       onMove={handleMove}
       onMoveEnd={redrawHalos}
     >
+
       {roadGeoJSON && showRoads && (
         <Source id="road-noise" type="geojson" data={roadGeoJSON}>
           <Layer {...roadHaloOuter} />
@@ -460,7 +471,7 @@ export default React.memo(function NoiseMap({ aircraftData, roadData, railwayDat
         )
       })}
 
-      {showAircraft && markerList.map(([icao, pos]: [string, [number, number]]) => {
+      {showAircrafts && markerList.map(([icao, pos]: [string, [number, number]]) => {
         const [lat, lng] = pos
         const aircraft = aircraftRef.current.get(icao)
         if (!aircraft) return null
