@@ -26,9 +26,9 @@ BACKUP_DIR="$SCRIPT_DIR/db-backup"
 GTFS_URL="https://eu.ftp.opendatasoft.com/sncf/plandata/Export_OpenData_SNCF_GTFS_NewTripId.zip"
 GTFS_ZIP="/tmp/gtfs-sncf.zip"
 
-DB_CONTAINER="${DB_CONTAINER:-timescaledb}"
-DB_USER="${DB_USER:-noiseuser}"
-DB_NAME="${DB_NAME:-noise_map}"
+TIMESCALE_HOST="${TIMESCALE_HOST:-timescaledb}"
+TIMESCALE_USER="${TIMESCALE_USER:-noiseuser}"
+TIMESCALE_NAME="${TIMESCALE_NAME:-noise_map}"
 
 # --- Trouver le backup le plus récent ---
 BACKUP_FILE=$(ls -t "$BACKUP_DIR"/*.sql.gz 2>/dev/null | head -1)
@@ -48,7 +48,7 @@ echo "[1/6] Démarrage de TimescaleDB..."
 docker compose up -d timescaledb
 
 echo "      Attente du démarrage de la base..."
-until docker exec "$DB_CONTAINER" pg_isready -U "$DB_USER" -d "$DB_NAME" -q 2>/dev/null; do
+until docker exec "$TIMESCALE_HOST" pg_isready -U "$TIMESCALE_USER" -d "$TIMESCALE_NAME" -q 2>/dev/null; do
   sleep 2
 done
 echo "      TimescaleDB prête."
@@ -56,13 +56,23 @@ echo "      TimescaleDB prête."
 # ── 2. Schéma ──────────────────────────────
 echo ""
 echo "[2/6] Initialisation du schéma (db-init.sql)..."
-docker exec -i "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" < "$SCRIPT_DIR/db-init.sql"
+for attempt in 1 2; do
+  if docker exec -i "$TIMESCALE_HOST" psql -U "$TIMESCALE_USER" -d "$TIMESCALE_NAME" < "$SCRIPT_DIR/db-init.sql"; then
+    break
+  fi
+  if [[ $attempt -eq 2 ]]; then
+    echo "Erreur : initialisation du schéma échouée après 2 tentatives" >&2
+    exit 1
+  fi
+  echo "      Tentative échouée, nouvelle tentative dans 10s..."
+  sleep 10
+done
 echo "      Schéma initialisé."
 
 # ── 3. Restore ─────────────────────────────
 echo ""
 echo "[3/6] Restauration du backup ($(basename "$BACKUP_FILE"))..."
-gunzip -c "$BACKUP_FILE" | docker exec -i "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME"
+gunzip -c "$BACKUP_FILE" | docker exec -i "$TIMESCALE_HOST" psql -U "$TIMESCALE_USER" -d "$TIMESCALE_NAME"
 echo "      Restauration terminée."
 
 # ── 4. Décompression shapes ────────────────

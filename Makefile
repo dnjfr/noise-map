@@ -265,7 +265,7 @@ import-madb:  ## Charge les données MAdB dans TimescaleDB
 	sleep 5
 	docker compose exec timescaledb psql -U noiseuser -d noise_map -c "\i /docker-entrypoint-dbinit.d/db-init.sql" 2>/dev/null || true
 	docker compose run --rm --no-deps -v $(PWD)/aircraft-data:/data \
-		-e DB_HOST=timescaledb \
+		-e TIMESCALE_HOST=timescaledb \
 		aircraft-processor python /data/import_madb.py
 
 # --- Init DB ---

@@ -60,9 +60,8 @@ services:
       POSTGRES_PASSWORD: $POSTGRES_PASSWORD
     volumes:
       - ./data/timescaledb:/var/lib/postgresql/data
-      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
-    mem_limit: 1g
-    memswap_limit: 1g
+    mem_limit: 2g
+    memswap_limit: 2g
 
   # pgadmin:
   #   container_name: pgadmin
@@ -199,8 +198,8 @@ services:
   # Met à jour rail_trips + rail_stop_times chaque jour à 18h (GTFS SNCF)
   gtfs-updater:
     build:
-      context: .
-      dockerfile: gtfs-updater/Dockerfile
+      context: ./gtfs-updater
+      dockerfile: Dockerfile
     container_name: gtfs-updater
     depends_on:
       timescaledb:
@@ -211,8 +210,6 @@ services:
       TIMESCALE_NAME: $TIMESCALE_NAME
       TIMESCALE_USER: $TIMESCALE_USER
       TIMESCALE_PASSWORD: $TIMESCALE_PASSWORD
-    mem_limit: 128m
-    memswap_limit: 128m
     restart: unless-stopped
 
 
