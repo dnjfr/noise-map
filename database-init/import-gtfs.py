@@ -24,15 +24,18 @@ import io
 import os
 import sys
 import psycopg
+from dotenv import load_dotenv
+
+load_dotenv(override=True)
 
 DEFAULT_GTFS_DIR = os.path.join(os.path.dirname(__file__), "gtfs-statique")
 
 DB_CONFIG = {
-    "host":     os.environ.get("DB_HOST",     "localhost"),
-    "port":     int(os.environ.get("DB_PORT", 5432)),
-    "dbname":   os.environ.get("DB_NAME",     "noise_map"),
-    "user":     os.environ.get("DB_USER",     "noiseuser"),
-    "password": os.environ.get("DB_PASSWORD", "noisepass"),
+    "host":     os.getenv("TIMESCALE_HOST"),
+    "port":     os.getenv("TIMESCALE_PORT"),
+    "dbname":   os.getenv("TIMESCALE_NAME"),
+    "user":     os.getenv("TIMESCALE_USER"),
+    "password": os.getenv("TIMESCALE_PASSWORD"),
 }
 
 

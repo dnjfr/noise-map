@@ -21,14 +21,14 @@ load_dotenv(override=True)
 # ─── Config ──────────────────────────────────────────────────────────────────
 
 KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
-DB_HOST     = os.getenv("DB_HOST", "localhost")
-DB_PORT     = os.getenv("DB_PORT", "5432")
-DB_NAME     = os.getenv("DB_NAME", "noise_map")
-DB_USER     = os.getenv("DB_USER", "noiseuser")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "noisepass")
-DATABASE_URL = f"postgresql+psycopg://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+TIMESCALE_HOST     = os.getenv("TIMESCALE_HOST")
+TIMESCALE_PORT     = os.getenv("TIMESCALE_PORT")
+TIMESCALE_NAME     = os.getenv("TIMESCALE_NAME")
+TIMESCALE_USER     = os.getenv("TIMESCALE_USER")
+TIMESCALE_PASSWORD = os.getenv("TIMESCALE_PASSWORD")
+DATABASE_URL = f"postgresql+psycopg://{TIMESCALE_USER}:{TIMESCALE_PASSWORD}@{TIMESCALE_HOST}:{TIMESCALE_PORT}/{TIMESCALE_NAME}"
 
-TOMTOM_API_KEY = os.getenv("TOMTOM_API_KEY", "")
+TOMTOM_API_KEY = os.getenv("TOMTOM_API_KEY")
 
 POLL_INTERVAL = 300  # 5 minutes
 

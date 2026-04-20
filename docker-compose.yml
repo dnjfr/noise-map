@@ -123,11 +123,11 @@ services:
         condition: service_started
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      DB_HOST: $TIMESCALE_HOST
-      DB_PORT: $TIMESCALE_PORT
-      DB_NAME: $TIMESCALE_NAME
-      DB_USER: $TIMESCALE_USER
-      DB_PASSWORD: $TIMESCALE_PASSWORD
+      TIMESCALE_HOST: $TIMESCALE_HOST
+      TIMESCALE_PORT: $TIMESCALE_PORT
+      TIMESCALE_NAME: $TIMESCALE_NAME
+      TIMESCALE_USER: $TIMESCALE_USER
+      TIMESCALE_PASSWORD: $TIMESCALE_PASSWORD
       TOMTOM_API_KEY: ${TOMTOM_API_KEY}
     mem_limit: 128m
     memswap_limit: 128m
@@ -145,11 +145,11 @@ services:
         condition: service_started
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      DB_HOST: $TIMESCALE_HOST
-      DB_PORT: $TIMESCALE_PORT
-      DB_NAME: $TIMESCALE_NAME
-      DB_USER: $TIMESCALE_USER
-      DB_PASSWORD: $TIMESCALE_PASSWORD
+      TIMESCALE_HOST: $TIMESCALE_HOST
+      TIMESCALE_PORT: $TIMESCALE_PORT
+      TIMESCALE_NAME: $TIMESCALE_NAME
+      TIMESCALE_USER: $TIMESCALE_USER
+      TIMESCALE_PASSWORD: $TIMESCALE_PASSWORD
     mem_limit: 256m
     memswap_limit: 256m
     restart: unless-stopped
@@ -166,11 +166,11 @@ services:
         condition: service_started
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      DB_HOST: $TIMESCALE_HOST
-      DB_PORT: $TIMESCALE_PORT
-      DB_NAME: $TIMESCALE_NAME
-      DB_USER: $TIMESCALE_USER
-      DB_PASSWORD: $TIMESCALE_PASSWORD
+      TIMESCALE_HOST: $TIMESCALE_HOST
+      TIMESCALE_PORT: $TIMESCALE_PORT
+      TIMESCALE_NAME: $TIMESCALE_NAME
+      TIMESCALE_USER: $TIMESCALE_USER
+      TIMESCALE_PASSWORD: $TIMESCALE_PASSWORD
     mem_limit: 128m
     memswap_limit: 128m
     restart: unless-stopped
@@ -187,11 +187,11 @@ services:
         condition: service_started
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      DB_HOST: $TIMESCALE_HOST
-      DB_PORT: $TIMESCALE_PORT
-      DB_NAME: $TIMESCALE_NAME
-      DB_USER: $TIMESCALE_USER
-      DB_PASSWORD: $TIMESCALE_PASSWORD
+      TIMESCALE_HOST: $TIMESCALE_HOST
+      TIMESCALE_PORT: $TIMESCALE_PORT
+      TIMESCALE_NAME: $TIMESCALE_NAME
+      TIMESCALE_USER: $TIMESCALE_USER
+      TIMESCALE_PASSWORD: $TIMESCALE_PASSWORD
     mem_limit: 256m
     memswap_limit: 256m
     restart: unless-stopped
@@ -206,11 +206,11 @@ services:
       timescaledb:
         condition: service_started
     environment:
-      DB_HOST: $TIMESCALE_HOST
-      DB_PORT: $TIMESCALE_PORT
-      DB_NAME: $TIMESCALE_NAME
-      DB_USER: $TIMESCALE_USER
-      DB_PASSWORD: $TIMESCALE_PASSWORD
+      TIMESCALE_HOST: $TIMESCALE_HOST
+      TIMESCALE_PORT: $TIMESCALE_PORT
+      TIMESCALE_NAME: $TIMESCALE_NAME
+      TIMESCALE_USER: $TIMESCALE_USER
+      TIMESCALE_PASSWORD: $TIMESCALE_PASSWORD
     mem_limit: 128m
     memswap_limit: 128m
     restart: unless-stopped
