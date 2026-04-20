@@ -2,7 +2,7 @@
 # Initialisation complète de la base de données noise_map sur une nouvelle VM.
 #
 # Usage:
-#   ./database-init/init-db.sh
+#   ./database-init/db-init.sh
 #
 # Prérequis :
 #   - Docker disponible
@@ -75,7 +75,9 @@ echo "      shapes.txt extrait dans $GTFS_DIR"
 # ── 5. Import shapes ──────────────────────
 echo ""
 echo "[5/6] Import des shapes dans rail_shapes..."
-python3 "$SCRIPT_DIR/import-gtfs.py" --shapes
+docker compose run --rm \
+  -v "$SCRIPT_DIR/gtfs-statique:/app/gtfs-statique:ro" \
+  gtfs-updater python3 import-gtfs.py --shapes
 echo "      rail_shapes importé."
 
 # ── 6. GTFS SNCF ──────────────────────────
@@ -86,7 +88,9 @@ echo "      Extraction vers $GTFS_DIR..."
 unzip -o "$GTFS_ZIP" -d "$GTFS_DIR" > /dev/null
 rm -f "$GTFS_ZIP"
 echo "      Import stops / routes / trips / stop_times..."
-python3 "$SCRIPT_DIR/import-gtfs.py"
+docker compose run --rm \
+  -v "$SCRIPT_DIR/gtfs-statique:/app/gtfs-statique:ro" \
+  gtfs-updater python3 import-gtfs.py
 echo "      GTFS importé."
 
 echo ""

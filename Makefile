@@ -241,21 +241,29 @@ import-patterns:  ## Charge les règles de correspondance ICAO → madb
 	python3 aircraft-data/import_icao_patterns.py
 
 import-shapes:  ## Importe rail_shapes depuis gtfs-statique/shapes.txt (one-shot pfaedle, ~461 MB)
-	python3 database-init/import-gtfs.py --shapes
+	docker compose run --rm \
+		-v $(PWD)/database-init/gtfs-statique:/app/gtfs-statique:ro \
+		gtfs-updater python3 import-gtfs.py --shapes
 
 import-gtfs:  ## Importe stops, routes, trips, stop_times (sans shapes)
-	python3 database-init/import-gtfs.py
+	docker compose run --rm \
+		-v $(PWD)/database-init/gtfs-statique:/app/gtfs-statique:ro \
+		gtfs-updater python3 import-gtfs.py
 
 import-gtfs-static:  ## Importe uniquement stops, routes
-	python3 database-init/import-gtfs.py --static
+	docker compose run --rm \
+		-v $(PWD)/database-init/gtfs-statique:/app/gtfs-statique:ro \
+		gtfs-updater python3 import-gtfs.py --static
 
 import-gtfs-temporal:  ## Importe uniquement trips, stop_times (mise à jour quotidienne ~18h)
-	python3 database-init/import-gtfs.py --temporal
+	docker compose run --rm \
+		-v $(PWD)/database-init/gtfs-statique:/app/gtfs-statique:ro \
+		gtfs-updater python3 import-gtfs.py --temporal
 
 import-madb:  ## Charge les données MAdB dans TimescaleDB
 	docker compose up -d timescaledb
 	sleep 5
-	docker compose exec timescaledb psql -U noiseuser -d noise_map -c "\i /docker-entrypoint-initdb.d/init-db.sql" 2>/dev/null || true
+	docker compose exec timescaledb psql -U noiseuser -d noise_map -c "\i /docker-entrypoint-dbinit.d/db-init.sql" 2>/dev/null || true
 	docker compose run --rm --no-deps -v $(PWD)/aircraft-data:/data \
 		-e DB_HOST=timescaledb \
 		aircraft-processor python /data/import_madb.py
