@@ -12,6 +12,8 @@ services:
     volumes:
       - zookeeper-data:/var/lib/zookeeper/data
       - zookeeper-logs:/var/lib/zookeeper/log
+    mem_limit: 256m
+    memswap_limit: 256m
 
   kafka:
     image: confluentinc/cp-kafka:7.5.0
@@ -44,6 +46,8 @@ services:
       timeout: 10s
       retries: 10
       start_period: 30s
+    mem_limit: 512m
+    memswap_limit: 512m
 
   timescaledb:
     image: timescale/timescaledb:2.25.2-pg15-oss
@@ -57,6 +61,8 @@ services:
     volumes:
       - ./data/timescaledb:/var/lib/postgresql/data
       - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    mem_limit: 1g
+    memswap_limit: 1g
 
   # pgadmin:
   #   container_name: pgadmin
@@ -79,6 +85,8 @@ services:
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       ROTATION_DELAY: 3
+    mem_limit: 128m
+    memswap_limit: 128m
     restart: unless-stopped
 
   # Consumer qui traite les données et calcule le bruit
@@ -99,39 +107,8 @@ services:
       TIMESCALE_NAME: $TIMESCALE_NAME
       TIMESCALE_USER: $TIMESCALE_USER
       TIMESCALE_PASSWORD: $TIMESCALE_PASSWORD
-    restart: unless-stopped
-
-  # API FastAPI pour exposer les données
-  api:
-    build:
-      context: ./api
-      dockerfile: Dockerfile
-    container_name: noise-api
-    depends_on:
-      - timescaledb
-    ports:
-      - "8000:8000"
-    environment:
-      TIMESCALE_HOST: $TIMESCALE_HOST
-      TIMESCALE_PORT: $TIMESCALE_PORT
-      TIMESCALE_NAME: $TIMESCALE_NAME
-      TIMESCALE_USER: $TIMESCALE_USER
-      TIMESCALE_PASSWORD: $TIMESCALE_PASSWORD
-    restart: unless-stopped
-
-  # Frontend pour visualiser la carte
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      args:
-        VITE_MAPTILER_API: $MAPTILER_API
-        VITE_API_URL: $VITE_API_URL
-    container_name: noise-frontend
-    depends_on:
-      - api
-    ports:
-      - "3000:80"
+    mem_limit: 256m
+    memswap_limit: 256m
     restart: unless-stopped
 
   road-producer:
@@ -152,6 +129,8 @@ services:
       DB_USER: $TIMESCALE_USER
       DB_PASSWORD: $TIMESCALE_PASSWORD
       TOMTOM_API_KEY: ${TOMTOM_API_KEY}
+    mem_limit: 128m
+    memswap_limit: 128m
     restart: unless-stopped
 
   road-processor:
@@ -171,6 +150,8 @@ services:
       DB_NAME: $TIMESCALE_NAME
       DB_USER: $TIMESCALE_USER
       DB_PASSWORD: $TIMESCALE_PASSWORD
+    mem_limit: 256m
+    memswap_limit: 256m
     restart: unless-stopped
 
   railway-producer:
@@ -190,6 +171,8 @@ services:
       DB_NAME: $TIMESCALE_NAME
       DB_USER: $TIMESCALE_USER
       DB_PASSWORD: $TIMESCALE_PASSWORD
+    mem_limit: 128m
+    memswap_limit: 128m
     restart: unless-stopped
 
   railway-processor:
@@ -209,8 +192,65 @@ services:
       DB_NAME: $TIMESCALE_NAME
       DB_USER: $TIMESCALE_USER
       DB_PASSWORD: $TIMESCALE_PASSWORD
+    mem_limit: 256m
+    memswap_limit: 256m
+    restart: unless-stopped
+
+  # Met à jour rail_trips + rail_stop_times chaque jour à 18h (GTFS SNCF)
+  gtfs-updater:
+    build:
+      context: .
+      dockerfile: gtfs-updater/Dockerfile
+    container_name: gtfs-updater
+    depends_on:
+      timescaledb:
+        condition: service_started
+    environment:
+      DB_HOST: $TIMESCALE_HOST
+      DB_PORT: $TIMESCALE_PORT
+      DB_NAME: $TIMESCALE_NAME
+      DB_USER: $TIMESCALE_USER
+      DB_PASSWORD: $TIMESCALE_PASSWORD
     mem_limit: 128m
     memswap_limit: 128m
+    restart: unless-stopped
+
+
+  # API FastAPI pour exposer les données
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: noise-api
+    depends_on:
+      - timescaledb
+    ports:
+      - "8000:8000"
+    environment:
+      TIMESCALE_HOST: $TIMESCALE_HOST
+      TIMESCALE_PORT: $TIMESCALE_PORT
+      TIMESCALE_NAME: $TIMESCALE_NAME
+      TIMESCALE_USER: $TIMESCALE_USER
+      TIMESCALE_PASSWORD: $TIMESCALE_PASSWORD
+    mem_limit: 256m
+    memswap_limit: 256m
+    restart: unless-stopped
+
+  # Frontend pour visualiser la carte
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_MAPTILER_API: $MAPTILER_API
+        VITE_API_URL: $VITE_API_URL
+    container_name: noise-frontend
+    depends_on:
+      - api
+    ports:
+      - "3000:80"
+    mem_limit: 64m
+    memswap_limit: 64m
     restart: unless-stopped
 
 volumes:

@@ -139,14 +139,6 @@ class RailwayNoiseLevel(Base):
     train_count = Column(Integer)
     grid_id = Column(String)
 
-class RailwayRouteRef(Base):
-    __tablename__ = "railway_routes_ref"
-
-    route_id = Column(String, primary_key=True)
-    route_name = Column(String)
-    shape_coords = Column(JSON)
-    updated_at = Column(TIMESTAMP(timezone=True))
-
 # Dépendance pour obtenir la session DB
 def get_db():
     """Générateur de dépendance FastAPI (Depends).

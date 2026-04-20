@@ -156,7 +156,7 @@ MADB_CACHE: dict = {}
 
 
 def load_madb_lookup(engine) -> dict:
-    """Charge en mémoire la vue matérialisée icao_to_madb_resolved.
+    """Charge en mémoire la vue matérialisée icao_noise_resolved.
 
     Cette vue contient les données de certification acoustique EASA MAdB
     pour chaque type ICAO. En cas d'échec (vue absente, import non fait),
@@ -178,7 +178,7 @@ def load_madb_lookup(engine) -> dict:
             overflight_dba,
             takeoff_dba,
             noise_unit
-        FROM icao_to_madb_resolved
+        FROM icao_noise_resolved
     """)
     cache = {}
     try:

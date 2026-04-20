@@ -61,44 +61,41 @@ noise-map/
 
 ### Démarrage
 
-1. **Cloner ou créer la structure de dossiers** avec tous les fichiers fournis
+1. **Cloner le dépôt**
 
-2. **Créer un fichier `.env` à partir du fichier exemple** et entrer vos identifiants ainsi que vos clés API Maptiler et TomTom
-
-3. Initialiser la base de données et la création des tables
+2. **Créer un fichier `.env`** à partir du fichier exemple et renseigner vos clés API Maptiler et TomTom :
 ```bash
-make db-init
+cp .env_example .env
 ```
 
-4. Récupérer le dump des tables statiques et le placer non décompressé dans le répertoire `backup_db`
-```bash
-make db-init
-```
-
-5. Restaurer les tables statiques 
-```bash
-make db-restore FILE=noise_map_20260408.sql.gz
-```
-
-
-2. **Lancer l'infrastructure** :
+3. **Lancer l'infrastructure** :
 ```bash
 make start
 ```
 
-3. **Vérifier que tout fonctionne** :
+4. **Initialiser la base de données** (une seule fois sur une nouvelle machine) :
 ```bash
-# Logs du producer (données OpenSky)
-docker logs -f aircraft-producer
+make db-init
+```
+Cette commande enchaîne automatiquement :
+- Démarrage de TimescaleDB
+- Création du schéma (`db-init.sql`)
+- Restauration des données de référence (avions, ferroviaire hors tracés)
+- Décompression de `shapes.tar.xz` et import des tracés ferroviaires
+- Téléchargement du GTFS SNCF et import des horaires trains
 
-# Logs du processor (calcul du bruit)
-docker logs -f noise-processor
+> **Note :** `python3` et `psycopg[binary]` doivent être disponibles sur la machine hôte.
 
-# Logs de l'API
-docker logs -f noise-api
+5. **Vérifier que tout fonctionne** :
+```bash
+make status
+
+# Logs par service
+make logs-aircraft-producer
+make logs-api
 ```
 
-4. **Accèder à l'application** :
+6. **Accéder à l'application** :
 - Frontend : http://localhost:3000
 - API : http://localhost:8000
 - Documentation API : http://localhost:8000/docs
@@ -126,6 +123,11 @@ Expose les données via REST API.
 
 ### Frontend
 Interface web avec carte interactive Leaflet.
+
+### GTFS Updater
+Met à jour automatiquement les horaires ferroviaires (`rail_trips`, `rail_stop_times`) chaque jour à 18h en téléchargeant le GTFS SNCF. Le plan de transport théorique intègre les adaptations connues la veille à 17h (perturbations, mouvements sociaux).
+
+> Les tracés géographiques (`rail_shapes`) sont statiques et ne sont pas re-téléchargés : ils sont générés via pfaedle et importés lors de l'initialisation.
 
 ## 📊 Endpoints API
 

@@ -12,6 +12,7 @@ osmnx_cache
 *.json
 __pycache__
 .rtk
-db_backup/*
-!db_backup/.gitkeep
+# database-init/db-backup/*
+# !database-init/db-backup/.gitkeep
 debug
+gtfs-statique

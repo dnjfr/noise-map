@@ -1,4 +1,4 @@
-.PHONY: help start stop restart logs clean clean-all status build build-frontend build-api build-aircraft-producer build-road-producer build-aircraft-processor build-road-processor build-railway-producer build-railway-processor logs-railway-producer logs-railway-processor import-madb import-icao import-patterns import-all refresh-madb-view import-rfn-lines
+.PHONY: help start stop restart logs clean clean-all status build build-frontend build-api build-aircraft-producer build-road-producer build-aircraft-processor build-road-processor build-railway-producer build-railway-processor logs-railway-producer logs-railway-processor import-madb import-icao import-patterns import-all refresh-madb-view import-rfn-lines import-shapes import-gtfs import-gtfs-static import-gtfs-temporal db-init
 
 help:
 	@echo "🗺️  Carte du Bruit - Commandes disponibles"
@@ -240,14 +240,17 @@ import-icao:  ## Extrait le mapping ICAO → modèles depuis le PDF FAA JO 7360.
 import-patterns:  ## Charge les règles de correspondance ICAO → madb
 	python3 aircraft-data/import_icao_patterns.py
 
-import-gtfs:  ## Importe le GTFS SNCF complet (statique + temporel) depuis archives/railway/pfaedle/gtfs-workdir/
-	python3 archives/railway/import_gtfs.py
+import-shapes:  ## Importe rail_shapes depuis gtfs-statique/shapes.txt (one-shot pfaedle, ~461 MB)
+	python3 database-init/import-gtfs.py --shapes
 
-import-gtfs-static:  ## Importe uniquement stops, routes, shapes (tables stables)
-	python3 archives/railway/import_gtfs.py --static
+import-gtfs:  ## Importe stops, routes, trips, stop_times (sans shapes)
+	python3 database-init/import-gtfs.py
 
-import-gtfs-temporal:  ## Importe uniquement trips, stop_times, calendar (2x/an)
-	python3 archives/railway/import_gtfs.py --temporal
+import-gtfs-static:  ## Importe uniquement stops, routes
+	python3 database-init/import-gtfs.py --static
+
+import-gtfs-temporal:  ## Importe uniquement trips, stop_times (mise à jour quotidienne ~18h)
+	python3 database-init/import-gtfs.py --temporal
 
 import-madb:  ## Charge les données MAdB dans TimescaleDB
 	docker compose up -d timescaledb
@@ -260,15 +263,13 @@ import-madb:  ## Charge les données MAdB dans TimescaleDB
 # --- Init DB ---
 
 # Usage: make db-init
-# A lancer une seule fois sur une nouvelle VM (avant db-restore si besoin)
+# Initialisation complète sur une nouvelle VM : démarrage DB + schéma + restore + shapes + GTFS
 db-init:
-	@echo "Initialisation du schéma (tables + hypertables)..."
-	docker exec -i timescaledb psql -U noiseuser -d noise_map < init-db.sql
-	@echo "Schéma initialisé."
+	bash database-init/db-init.sh
 
 # --- Backup / Restore ---
 
-BACKUP_DIR := ./db_backup
+BACKUP_DIR := ./database-init/db-backup
 
 # Usage: make db-backup
 db-backup:
@@ -277,15 +278,7 @@ db-backup:
 	docker exec timescaledb pg_dump -U noiseuser -d noise_map --clean --if-exists \
 		-t icao_type_mapping \
 		-t madb_noise_ref \
-		-t icao_to_madb_pattern \
-		-t rail_stops \
-		-t rail_routes \
-		-t rail_shapes \
-		-t rail_trips \
-		-t rail_stop_times \
-		-t rail_calendar \
-		-t railway_routes_ref \
-		-t road_segments_ref \
+		-t icao_noise_pattern \
 		| gzip > $(BACKUP_DIR)/noise_map_$$(date +%Y%m%d).sql.gz
 	@echo "Backup sauvegardé: $(BACKUP_DIR)/noise_map_$$(date +%Y%m%d).sql.gz"
 

@@ -39,9 +39,9 @@ export const MAP_STYLES = {
 
 export type MapStyleKey = keyof typeof MAP_STYLES
 
-// Zoom minimum et maximum de la carte (augmenter le zoom consomme des crédits Maptiler)
+// Zoom minimum et maximum de la carte (élargir le zoom consomme plus de crédits Maptiler)
 const MIN_ZOOM = 6
-const MAX_ZOOM = 11
+const MAX_ZOOM = 10
 
 // Latitude sur laquelle est centrée la map
 const LAT_REF = 46.6

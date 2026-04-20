@@ -99,7 +99,7 @@ TOMTOM_ZOOM = 8
 # Obtenues en divisant chaque tuile zoom 7 en 4 tuiles zoom 8 (2x, 2y) / (2x+1, 2y) / (2x, 2y+1) / (2x+1, 2y+1)
 # Géométrie 4× plus précise qu'au zoom 7 — élimine les routes "fantômes" causées par
 # la simplification excessive des polylines au zoom 7.
-# 72 req/h × 24h = 1 728 req/jour (quota TomTom free : 50k/jour)
+# 72 req toutes les 5 minutes × 24h = 8 640 req/jour (quota TomTom free : 50k/jour)
 TOMTOM_FRANCE_TILES = [
     # Rangée nord — ~49.0-51.0°N (Normandie, Paris-nord, Lille, Alsace-nord)
     (126, 86), (127, 86), (126, 87), (127, 87),  # ex (63,43)
