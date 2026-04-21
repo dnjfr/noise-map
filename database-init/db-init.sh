@@ -50,7 +50,7 @@ docker compose up -d timescaledb
 
 echo "      Attente du démarrage de la base..."
 until docker exec "$TIMESCALE_HOST" pg_isready -U "$TIMESCALE_USER" -d "$TIMESCALE_NAME" -q 2>/dev/null; do
-  sleep 2
+  sleep 10
 done
 echo "      TimescaleDB prête."
 
