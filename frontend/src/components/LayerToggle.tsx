@@ -31,7 +31,7 @@ export default React.memo(function LayerToggle({ showAircraft, showRoads, showRa
         />
         <span className="flex items-center gap-1.5 text-slate-200 text-sm font-medium">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 shrink-0">
-            <path d="M4 3h2v18H4V3zm14 0h2v18h-2V3zm-5 3h2v3h-2V6zm0 6h2v3h-2v-3zm0 6h2v3h-2v-3z"/>
+            <path d="M4 3h2v18H4V3zm14 0h2v18h-2V3zm-7 2h2v3h-2V6zm0 6h2v3h-2v-3zm0 6h2v3h-2v-3z"/>
           </svg>
           Routes
         </span>

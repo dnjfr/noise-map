@@ -25,6 +25,7 @@ import os
 import sys
 import psycopg
 from dotenv import load_dotenv
+from tqdm import tqdm
 
 load_dotenv(override=True)
 
@@ -45,14 +46,6 @@ def table_is_empty(conn, table: str) -> bool:
         return cur.fetchone()[0]
 
 
-PROGRESS_STEP = 100_000
-
-
-def _progress(i: int, label: str = "lignes") -> None:
-    if i % PROGRESS_STEP == 0:
-        print(f"    {i:,} {label} lus...", flush=True)
-
-
 def copy_csv(conn, table: str, columns: list[str], rows: list[list]) -> int:
     """Bulk-load rows into table via COPY. Returns number of rows loaded."""
     buf = io.StringIO()
@@ -71,7 +64,7 @@ def import_stops(conn, gtfs_dir: str) -> int:
     path = os.path.join(gtfs_dir, "stops.txt")
     rows = []
     with open(path, newline="", encoding="utf-8") as f:
-        for row in csv.DictReader(f):
+        for row in tqdm(csv.DictReader(f), desc="    stops", unit=" arrêts"):
             rows.append([
                 row["stop_id"],
                 row["stop_name"],
@@ -80,7 +73,6 @@ def import_stops(conn, gtfs_dir: str) -> int:
                 row.get("parent_station") or None,
                 int(row["location_type"]) if row.get("location_type") else 0,
             ])
-    print(f"    {len(rows):,} arrêts lus — COPY...", flush=True)
     return copy_csv(conn, "rail_stops",
                     ["stop_id", "stop_name", "stop_lat", "stop_lon", "parent_station", "location_type"],
                     rows)
@@ -90,7 +82,7 @@ def import_routes(conn, gtfs_dir: str) -> int:
     path = os.path.join(gtfs_dir, "routes.txt")
     rows = []
     with open(path, newline="", encoding="utf-8") as f:
-        for row in csv.DictReader(f):
+        for row in tqdm(csv.DictReader(f), desc="    routes", unit=" routes"):
             rows.append([
                 row["route_id"],
                 row.get("route_short_name") or None,
@@ -99,7 +91,6 @@ def import_routes(conn, gtfs_dir: str) -> int:
                 row.get("route_color") or None,
                 row.get("agency_id") or None,
             ])
-    print(f"    {len(rows):,} routes lues — COPY...", flush=True)
     return copy_csv(conn, "rail_routes",
                     ["route_id", "route_short_name", "route_long_name", "route_type", "route_color", "agency_id"],
                     rows)
@@ -109,7 +100,7 @@ def import_shapes(conn, gtfs_dir: str) -> int:
     path = os.path.join(gtfs_dir, "shapes.txt")
     rows = []
     with open(path, newline="", encoding="utf-8") as f:
-        for i, row in enumerate(csv.DictReader(f), 1):
+        for row in tqdm(csv.DictReader(f), desc="    shapes", unit=" pts"):
             rows.append([
                 row["shape_id"],
                 float(row["shape_pt_lat"]),
@@ -117,8 +108,6 @@ def import_shapes(conn, gtfs_dir: str) -> int:
                 int(row["shape_pt_sequence"]),
                 float(row["shape_dist_traveled"]) if row.get("shape_dist_traveled") else None,
             ])
-            _progress(i, "points")
-    print(f"    {len(rows):,} points lus — COPY...", flush=True)
     return copy_csv(conn, "rail_shapes",
                     ["shape_id", "shape_pt_lat", "shape_pt_lon", "shape_pt_sequence", "shape_dist_traveled"],
                     rows)
@@ -128,7 +117,7 @@ def import_trips(conn, gtfs_dir: str) -> int:
     path = os.path.join(gtfs_dir, "trips.txt")
     rows = []
     with open(path, newline="", encoding="utf-8") as f:
-        for i, row in enumerate(csv.DictReader(f), 1):
+        for row in tqdm(csv.DictReader(f), desc="    trips", unit=" trajets"):
             rows.append([
                 row["trip_id"],
                 row["route_id"],
@@ -138,8 +127,6 @@ def import_trips(conn, gtfs_dir: str) -> int:
                 row.get("trip_headsign") or None,
                 int(row["direction_id"]) if row.get("direction_id") else None,
             ])
-            _progress(i, "trajets")
-    print(f"    {len(rows):,} trajets lus — COPY...", flush=True)
     return copy_csv(conn, "rail_trips",
                     ["trip_id", "route_id", "service_id", "shape_id", "trip_short_name", "trip_headsign", "direction_id"],
                     rows)
@@ -149,7 +136,7 @@ def import_stop_times(conn, gtfs_dir: str) -> int:
     path = os.path.join(gtfs_dir, "stop_times.txt")
     rows = []
     with open(path, newline="", encoding="utf-8") as f:
-        for i, row in enumerate(csv.DictReader(f), 1):
+        for row in tqdm(csv.DictReader(f), desc="    stop_times", unit=" horaires"):
             rows.append([
                 row["trip_id"],
                 row["stop_id"],
@@ -158,8 +145,6 @@ def import_stop_times(conn, gtfs_dir: str) -> int:
                 row.get("departure_time") or None,
                 float(row["shape_dist_traveled"]) if row.get("shape_dist_traveled") else None,
             ])
-            _progress(i, "horaires")
-    print(f"    {len(rows):,} horaires lus — COPY...", flush=True)
     return copy_csv(conn, "rail_stop_times",
                     ["trip_id", "stop_id", "stop_sequence", "arrival_time", "departure_time", "shape_dist_traveled"],
                     rows)
@@ -217,16 +202,50 @@ def main():
 
         if do_temporal:
             print("\n── Tables temporelles ──")
-            # Ordre important : trips avant stop_times (FK implicite)
             for table, fn in [
                 ("rail_trips",      import_trips),
                 ("rail_stop_times", import_stop_times),
             ]:
                 print(f"  {table} :", flush=True)
                 with conn.transaction():
-                    conn.execute(f"TRUNCATE {table} CASCADE")
+                    conn.execute(f"TRUNCATE {table}")
                     n = fn(conn, gtfs_dir)
                 print(f"  ✓ {n:,} lignes importées")
+
+            # Appliquer le mapping shape depuis rail_route_shapes
+            print("\n── Application du mapping shapes ──", flush=True)
+            with conn.cursor() as cur:
+                cur.execute("SELECT COUNT(*) FROM rail_route_shapes")
+                mapping_count = cur.fetchone()[0]
+
+            if mapping_count == 0:
+                print("  ⚠ rail_route_shapes vide — lancez 'make assign-shapes' après import-shapes")
+            else:
+                with conn.transaction():
+                    with conn.cursor() as cur:
+                        cur.execute("""
+                            UPDATE rail_trips t
+                            SET shape_id = subq.shape_id
+                            FROM (
+                                SELECT t2.trip_id, rrs.shape_id
+                                FROM rail_trips t2
+                                JOIN (
+                                    SELECT DISTINCT ON (trip_id) trip_id, stop_id AS first_stop
+                                    FROM rail_stop_times ORDER BY trip_id, stop_sequence ASC
+                                ) fst ON fst.trip_id = t2.trip_id
+                                JOIN (
+                                    SELECT DISTINCT ON (trip_id) trip_id, stop_id AS last_stop
+                                    FROM rail_stop_times ORDER BY trip_id, stop_sequence DESC
+                                ) lst ON lst.trip_id = t2.trip_id
+                                JOIN rail_route_shapes rrs
+                                    ON  rrs.route_id   = t2.route_id
+                                    AND rrs.first_stop = fst.first_stop
+                                    AND rrs.last_stop  = lst.last_stop
+                            ) subq
+                            WHERE t.trip_id = subq.trip_id
+                        """)
+                        n_updated = cur.rowcount
+                print(f"  ✓ {n_updated:,} trips mis à jour avec leur shape_id")
 
     print("\nImport terminé.")
 

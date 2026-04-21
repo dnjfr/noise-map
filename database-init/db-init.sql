@@ -1,12 +1,11 @@
 -- Créer l'extension TimescaleDB
 CREATE EXTENSION IF NOT EXISTS timescaledb;
-CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
 -- Table pour stocker les positions des avions
 CREATE TABLE IF NOT EXISTS aircraft_positions (
     time TIMESTAMPTZ NOT NULL,
-    icao24 VARCHAR(10) NOT NULL,
-    callsign VARCHAR(10),
+    icao24 TEXT NOT NULL,
+    callsign TEXT,
     latitude DOUBLE PRECISION,
     longitude DOUBLE PRECISION,
     altitude DOUBLE PRECISION,
@@ -14,9 +13,9 @@ CREATE TABLE IF NOT EXISTS aircraft_positions (
     heading DOUBLE PRECISION,
     vertical_rate DOUBLE PRECISION,
     on_ground BOOLEAN,
-    aircraft_type VARCHAR(10),
-    aircraft_desc VARCHAR(100),
-    aircraft_category VARCHAR(5)
+    aircraft_type TEXT,
+    aircraft_desc TEXT,
+    aircraft_category TEXT
 );
 
 -- Convertir en hypertable pour optimisation temporelle
@@ -29,7 +28,7 @@ CREATE TABLE IF NOT EXISTS aircraft_noise_levels (
     longitude DOUBLE PRECISION NOT NULL,
     noise_db DOUBLE PRECISION NOT NULL,
     aircraft_count INTEGER,
-    grid_id VARCHAR(20)
+    grid_id TEXT
 );
 
 -- Convertir en hypertable
@@ -49,73 +48,9 @@ CREATE INDEX IF NOT EXISTS idx_aircraft_noise_levels_grid
 SELECT add_retention_policy('aircraft_positions', INTERVAL '7 days', if_not_exists => TRUE);
 SELECT add_retention_policy('aircraft_noise_levels', INTERVAL '7 days', if_not_exists => TRUE);
 
--- Table de correspondance codes ICAO → fabricant/modèle (FAA JO 7360.1H)
-CREATE TABLE IF NOT EXISTS icao_type_mapping (
-    id             SERIAL PRIMARY KEY,
-    icao_code      VARCHAR(10)  NOT NULL,
-    manufacturer   VARCHAR(200),
-    model          VARCHAR(300) NOT NULL,
-    aircraft_class VARCHAR(50),
-    wtc            VARCHAR(10),
-    UNIQUE(icao_code, manufacturer, model)
-);
-CREATE INDEX IF NOT EXISTS idx_icao_type_code ON icao_type_mapping(icao_code);
-
--- Table de correspondance ICAO → patterns madb_noise_ref (pour jointures)
-CREATE TABLE IF NOT EXISTS icao_noise_pattern (
-    id                        SERIAL PRIMARY KEY,
-    icao_code                 VARCHAR(10)  NOT NULL,
-    model_pattern        VARCHAR(200) NOT NULL,
-    manufacturer_pattern VARCHAR(200),
-    notes                     VARCHAR(500)
-);
-CREATE INDEX IF NOT EXISTS idx_icao_to_pattern_code ON icao_noise_pattern(icao_code);
-
--- Table de référence des niveaux de bruit certifiés MAdB (EASA/ICAO)
-CREATE TABLE IF NOT EXISTS madb_noise_ref (
-    id SERIAL PRIMARY KEY,
-    source VARCHAR(20) NOT NULL,
-    record_number VARCHAR(20),
-    manufacturer VARCHAR(100),
-    aircraft_model VARCHAR(200),
-    mtom_kg INTEGER,
-    lateral_epndb FLOAT,
-    flyover_epndb FLOAT,
-    approach_epndb FLOAT,
-    overflight_dba FLOAT,
-    takeoff_dba FLOAT,
-    noise_unit VARCHAR(10) NOT NULL,
-    UNIQUE(source, record_number)
-);
-
--- Index GIN trigram pour accélérer les regex ~ sur aircraft_model
-CREATE INDEX IF NOT EXISTS idx_madb_aircraft_model_trgm
-    ON madb_noise_ref USING GIN (aircraft_model gin_trgm_ops);
-
--- Vue matérialisée pré-calculant la jointure icao_noise_pattern × madb_noise_ref
--- Réduit load_madb_lookup de 2-3 min à < 1s
--- Rafraîchir après make import-all : make refresh-madb-view
-CREATE MATERIALIZED VIEW IF NOT EXISTS icao_noise_resolved AS
-SELECT
-    p.icao_code,
-    m.flyover_epndb,
-    m.approach_epndb,
-    m.overflight_dba,
-    m.takeoff_dba,
-    m.noise_unit
-FROM icao_noise_pattern p
-JOIN madb_noise_ref m
-    ON (p.manufacturer_pattern IS NULL
-        OR m.manufacturer ILIKE p.manufacturer_pattern)
-   AND m.aircraft_model ~ p.model_pattern
-WITH NO DATA;
-
-CREATE INDEX IF NOT EXISTS idx_icao_noise_resolved_code
-    ON icao_noise_resolved (icao_code);
-
 -- Référentiel statique des segments routiers (rempli au démarrage du road-producer)
 CREATE TABLE IF NOT EXISTS road_segments_ref (
-    code_pme       VARCHAR(20) PRIMARY KEY,
+    code_pme       TEXT PRIMARY KEY,
     axe            VARCHAR(20),
     source         VARCHAR(10),
     lat_deb        DOUBLE PRECISION,
@@ -153,7 +88,7 @@ ALTER TABLE road_segments_ref ADD COLUMN IF NOT EXISTS traffic_flow INTEGER;
 -- Niveaux de bruit routier par segment (hypertable TimescaleDB)
 CREATE TABLE IF NOT EXISTS road_noise_levels (
     time          TIMESTAMPTZ NOT NULL,
-    code_pme      VARCHAR(20) NOT NULL,
+    code_pme      TEXT NOT NULL,
     noise_db      DOUBLE PRECISION NOT NULL,
     traffic_flow  INTEGER,
     average_speed DOUBLE PRECISION
@@ -201,9 +136,8 @@ CREATE INDEX IF NOT EXISTS idx_railway_noise_grid
 SELECT add_retention_policy('railway_noise_levels', INTERVAL '7 days', if_not_exists => TRUE);
 
 -- ─── Tables GTFS SNCF ────────────────────────────────────────────────────────
--- Remplies par : python3 archives/railway/import_gtfs.py
--- Tables statiques (import unique, stables) : rail_stops, rail_routes, rail_shapes
--- Tables temporelles (2x/an, changements de service) : rail_trips, rail_stop_times, rail_calendar
+-- Statiques (backup) : rail_stops, rail_routes, rail_route_shapes
+-- Temporelles (refetchées depuis SNCF à chaque mise à jour) : rail_trips, rail_stop_times
 
 CREATE TABLE IF NOT EXISTS rail_stops (
     stop_id          TEXT PRIMARY KEY,
@@ -224,6 +158,32 @@ CREATE TABLE IF NOT EXISTS rail_routes (
     agency_id        TEXT
 );
 
+-- Trips SNCF — temporels, rechargés depuis SNCF à chaque mise à jour GTFS
+CREATE TABLE IF NOT EXISTS rail_trips (
+    trip_id          TEXT PRIMARY KEY,
+    route_id         TEXT NOT NULL,
+    service_id       TEXT NOT NULL,
+    shape_id         TEXT,
+    trip_short_name  TEXT,
+    trip_headsign    TEXT,
+    direction_id     SMALLINT
+);
+CREATE INDEX IF NOT EXISTS idx_rail_trips_route ON rail_trips (route_id);
+CREATE INDEX IF NOT EXISTS idx_rail_trips_shape ON rail_trips (shape_id);
+
+-- Mapping statique (route_id, first_stop, last_stop) → shape_id
+-- Calculé une fois par assign_shapes.py après l'import pfaedle, sauvegardé dans db-backup.
+-- Appliqué automatiquement par import-gtfs.py après chaque rechargement des trips.
+CREATE TABLE IF NOT EXISTS rail_route_shapes (
+    route_id     TEXT NOT NULL,
+    first_stop   TEXT NOT NULL,
+    last_stop    TEXT NOT NULL,
+    shape_id     TEXT NOT NULL,
+    match_score  DOUBLE PRECISION,
+    PRIMARY KEY (route_id, first_stop, last_stop)
+);
+CREATE INDEX IF NOT EXISTS idx_rail_route_shapes_route ON rail_route_shapes (route_id);
+
 CREATE TABLE IF NOT EXISTS rail_shapes (
     shape_id             TEXT NOT NULL,
     shape_pt_lat         DOUBLE PRECISION NOT NULL,
@@ -235,19 +195,6 @@ CREATE TABLE IF NOT EXISTS rail_shapes (
 CREATE INDEX IF NOT EXISTS idx_rail_shapes_id ON rail_shapes (shape_id);
 
 -- Tables temporelles — TRUNCATE + reload à chaque changement de service SNCF
-CREATE TABLE IF NOT EXISTS rail_trips (
-    trip_id              TEXT PRIMARY KEY,
-    route_id             TEXT NOT NULL,
-    service_id           TEXT NOT NULL,
-    shape_id             TEXT,
-    trip_short_name      TEXT,
-    trip_headsign        TEXT,
-    direction_id         SMALLINT
-);
-CREATE INDEX IF NOT EXISTS idx_rail_trips_route  ON rail_trips (route_id);
-CREATE INDEX IF NOT EXISTS idx_rail_trips_shape  ON rail_trips (shape_id);
-CREATE INDEX IF NOT EXISTS idx_rail_trips_service ON rail_trips (service_id);
-
 CREATE TABLE IF NOT EXISTS rail_stop_times (
     trip_id              TEXT NOT NULL,
     stop_id              TEXT NOT NULL,

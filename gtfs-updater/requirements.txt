@@ -1,3 +1,5 @@
 python-dotenv
 psycopg[binary]
 schedule
+tqdm
+numpy

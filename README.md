@@ -24,8 +24,8 @@ OpenSky API → Producer (Python) → Kafka → Processor → TimescaleDB → AP
 ## 🚀 Installation rapide
 
 ### Prérequis
-- Docker et Docker Compose installés
-- Au moins 4 GB de RAM disponibles
+- Docker, Docker Compose, XZ et Unzip installés
+- Au moins 6 GB de RAM disponibles
 
 ### Structure des dossiers
 
@@ -35,12 +35,23 @@ noise-map/
 │   ├── Dockerfile
 │   ├── requirements.txt
 │   └── main.py
-├── backup_db/
 ├── data/
+├── database-init/
+│   ├── db-backup/
+│   │   └── noise_map_YYYYmmdd.sql.gz
+│   ├── shapes-import/
+│   │   └── shapes.tar.xz
+│   ├── db-init.sh
+│   └── db-init.sql
 ├── frontend/
 │   ├── Dockerfile
 │   ├── index.html
 │   └──  app.js
+├── gtfs-updater/
+│   ├── Dockerfile
+│   ├── assign-shapes.py
+│   ├── import-gtfs.py
+│   └── updater.py
 ├── processors/
 │   ├── Dockerfile
 │   ├── requirements.txt
@@ -51,7 +62,6 @@ noise-map/
 │   └── producer.py
 ├── .env
 ├── docker-compose.yml
-├── init-db.sql
 ├── Makefile
 └── README.md
 
@@ -68,12 +78,7 @@ noise-map/
 cp .env_example .env
 ```
 
-3. **Lancer l'infrastructure** :
-```bash
-make start
-```
-
-4. **Initialiser la base de données** (une seule fois sur une nouvelle machine) :
+3. **Initialiser la base de données** (une seule fois sur une nouvelle machine) :
 ```bash
 make db-init
 ```
@@ -84,7 +89,9 @@ Cette commande enchaîne automatiquement :
 - Décompression de `shapes.tar.xz` et import des tracés ferroviaires
 - Téléchargement du GTFS SNCF et import des horaires trains
 
-> **Note :** `python3` et `psycopg[binary]` doivent être disponibles sur la machine hôte.
+4. **Lancer l'infrastructure** :
+```bash
+make start
 
 5. **Vérifier que tout fonctionne** :
 ```bash
@@ -127,7 +134,7 @@ Interface web avec carte interactive Leaflet.
 ### GTFS Updater
 Met à jour automatiquement les horaires ferroviaires (`rail_trips`, `rail_stop_times`) chaque jour à 18h en téléchargeant le GTFS SNCF. Le plan de transport théorique intègre les adaptations connues la veille à 17h (perturbations, mouvements sociaux).
 
-> Les tracés géographiques (`rail_shapes`) sont statiques et ne sont pas re-téléchargés : ils sont générés via pfaedle et importés lors de l'initialisation.
+> Les tracés géographiques (`rail_shapes`) sont statiques et ne sont pas re-téléchargés : ils ont été générés via pfaedle et importés lors de l'initialisation.
 
 ## 📊 Endpoints API
 
@@ -253,6 +260,7 @@ Que faire des données ? Rien n'empêche de créer un dataset de toutes les donn
   - Épidémiologie : croiser les zones d'exposition chronique avec des données de santé (hypertension, troubles du sommeil), ce qui est un sujet de recherche actif à l'OMS
   - Médecins / mutuelles : identifier les populations à risque selon leur adresse
   - Maternités / pédiatres : exposition au bruit des nourrissons et enfants
+  - Etablissements de soins / maisons de retraite : identifier les zons d'exposition au bruit
 
 ### Transport & mobilité
   - Optimisation des couloirs aériens : montrer à la DGAC ou aux aéroports quelles trajectoires sont les plus impactantes sur les zones habitées   

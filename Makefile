@@ -13,6 +13,7 @@ help:
 	@echo "  make logs-aircraft-processor    - Affiche les logs du processor avions"
 	@echo "  make logs-road-processor     - Affiche les logs du processor routier"
 	@echo "  make logs-railway-processor    - Affiche les logs du processor trains"
+	@echo "  make logs-kafka                - Affiche les logs de Kafka"
 	@echo "  make logs-api                - Affiche les logs de l'API"
 	@echo "  make status         - Statut des services"
 	@echo "  make clean          - Arrête et supprime tout (volumes inclus)"
@@ -72,6 +73,9 @@ logs-railway-producer:
 
 logs-railway-processor:
 	docker compose logs -f railway-processor
+
+logs-kafka:
+	docker logs -f kafka
 
 logs-api:
 	docker logs -f noise-api
@@ -245,6 +249,9 @@ import-shapes:  ## Importe rail_shapes depuis gtfs-statique/shapes.txt (one-shot
 		-v $(PWD)/database-init/gtfs-statique:/app/gtfs-statique:ro \
 		gtfs-updater python3 import-gtfs.py --shapes
 
+assign-shapes:  ## Calcule le mapping (route, first_stop, last_stop) → shape_id et l'écrit dans rail_route_shapes + rail_trips
+	docker compose run --rm gtfs-updater python3 assign_shapes.py
+
 import-gtfs:  ## Importe stops, routes, trips, stop_times (sans shapes)
 	docker compose run --rm \
 		-v $(PWD)/database-init/gtfs-statique:/app/gtfs-statique:ro \
@@ -287,6 +294,7 @@ db-backup:
 		-t icao_type_mapping \
 		-t madb_noise_ref \
 		-t icao_noise_pattern \
+		-t rail_route_shapes \
 		| gzip > $(BACKUP_DIR)/noise_map_$$(date +%Y%m%d).sql.gz
 	@echo "Backup sauvegardé: $(BACKUP_DIR)/noise_map_$$(date +%Y%m%d).sql.gz"
 

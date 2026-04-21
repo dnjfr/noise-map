@@ -12,10 +12,11 @@
 # Étapes :
 #   1. Démarrage de TimescaleDB
 #   2. Initialisation du schéma (db-init.sql)
-#   3. Restauration des données de référence (backup)
+#   3. Restauration des données de référence statiques (backup : icao, madb, rail_route_shapes)
 #   4. Décompression de shapes.tar.xz → database-init/gtfs-statique/shapes.txt
-#   5. Import des shapes dans rail_shapes
-#   6. Téléchargement du GTFS SNCF + import stops/routes/trips/stop_times
+#   5. Import des shapes dans rail_shapes (si table vide)
+#   6. Calcul du mapping shape si rail_route_shapes est vide (make assign-shapes)
+#   7. Téléchargement du GTFS SNCF + import trips/stop_times + application du mapping
 
 set -euo pipefail
 
@@ -82,22 +83,41 @@ mkdir -p "$GTFS_DIR"
 tar -xJf "$SHAPES_ARCHIVE" -C "$SCRIPT_DIR"
 echo "      shapes.txt extrait dans $GTFS_DIR"
 
-# ── 5. Import shapes ──────────────────────
+# ── 5. Import shapes (si rail_shapes est vide) ────────────────────────────────
 echo ""
-echo "[5/6] Import des shapes dans rail_shapes..."
-docker compose run --rm \
-  -v "$SCRIPT_DIR/gtfs-statique:/app/gtfs-statique:ro" \
-  gtfs-updater python3 import-gtfs.py --shapes
-echo "      rail_shapes importé."
+echo "[5/7] Import des shapes dans rail_shapes..."
+SHAPES_COUNT=$(docker exec "$TIMESCALE_HOST" psql -U "$TIMESCALE_USER" -d "$TIMESCALE_NAME" -tAc \
+  "SELECT COUNT(*) FROM rail_shapes" 2>/dev/null || echo "0")
+if [[ "$SHAPES_COUNT" -gt 0 ]]; then
+  echo "      rail_shapes déjà remplie ($SHAPES_COUNT pts) — ignorée."
+else
+  docker compose run --rm \
+    -v "$SCRIPT_DIR/gtfs-statique:/app/gtfs-statique:ro" \
+    gtfs-updater python3 import-gtfs.py --shapes
+  echo "      rail_shapes importée."
+fi
 
-# ── 6. GTFS SNCF ──────────────────────────
+# ── 6. Calcul du mapping shape (si rail_route_shapes est vide) ────────────────
 echo ""
-echo "[6/6] Téléchargement du GTFS SNCF..."
+echo "[6/7] Vérification du mapping shapes → trips..."
+MAPPING_COUNT=$(docker exec "$TIMESCALE_HOST" psql -U "$TIMESCALE_USER" -d "$TIMESCALE_NAME" -tAc \
+  "SELECT COUNT(*) FROM rail_route_shapes" 2>/dev/null || echo "0")
+if [[ "$MAPPING_COUNT" -gt 0 ]]; then
+  echo "      rail_route_shapes déjà remplie ($MAPPING_COUNT entrées) — restaurée depuis backup."
+else
+  echo "      rail_route_shapes vide — calcul du mapping géométrique (1-2 min)..."
+  docker compose run --rm gtfs-updater python3 assign_shapes.py
+  echo "      Mapping calculé."
+fi
+
+# ── 7. GTFS SNCF ──────────────────────────────────────────────────────────────
+echo ""
+echo "[7/7] Téléchargement du GTFS SNCF..."
 curl -fsSL -o "$GTFS_ZIP" "$GTFS_URL"
 echo "      Extraction vers $GTFS_DIR..."
 unzip -o "$GTFS_ZIP" -d "$GTFS_DIR" > /dev/null
 rm -f "$GTFS_ZIP"
-echo "      Import stops / routes / trips / stop_times..."
+echo "      Import stops + routes + trips + stop_times + application mapping shapes..."
 docker compose run --rm \
   -v "$SCRIPT_DIR/gtfs-statique:/app/gtfs-statique:ro" \
   gtfs-updater python3 import-gtfs.py

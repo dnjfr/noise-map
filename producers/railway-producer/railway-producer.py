@@ -90,7 +90,11 @@ def ensure_stops_cache(engine):
 
 
 def load_active_gtfs_data(engine, trip_ids: list):
-    """Charge depuis la DB uniquement les données des trips actifs (trips, stop_times, shapes).
+    """Charge depuis la DB uniquement les données des trips actifs (trips, stop_times).
+
+    Les shapes ne sont pas chargées ici : elles sont servies directement au frontend
+    par l'API (/api/railways/shapes). Le producer utilise l'interpolation stop-to-stop
+    (fallback) qui ne nécessite pas les géométries OSM.
 
     Retourne un dict gtfs_static partiel, ou None en cas d'erreur.
     """
@@ -110,9 +114,6 @@ def load_active_gtfs_data(engine, trip_ids: list):
                 for trip_id, route_id, shape_id, name in rows
             }
 
-            # shape_ids nécessaires pour ces trips
-            shape_ids = list({v["shape_id"] for v in trips.values() if v["shape_id"]})
-
             # stop_times → {trip_id: [{stop_id, arrival, departure, seq, dist}, ...]}
             rows = conn.execute(text(
                 "SELECT trip_id, stop_id, arrival_time, departure_time, stop_sequence, shape_dist_traveled "
@@ -130,20 +131,8 @@ def load_active_gtfs_data(engine, trip_ids: list):
                     "dist": dist or 0.0,
                 })
 
-            # shapes → {shape_id: [[lon, lat, dist], ...]}
-            shapes: dict = {}
-            if shape_ids:
-                rows = conn.execute(text(
-                    "SELECT shape_id, shape_pt_lon, shape_pt_lat, shape_dist_traveled "
-                    "FROM rail_shapes WHERE shape_id = ANY(:ids) ORDER BY shape_id, shape_pt_sequence"
-                ), {"ids": shape_ids}).fetchall()
-                for shape_id, lon, lat, dist in rows:
-                    if shape_id not in shapes:
-                        shapes[shape_id] = []
-                    shapes[shape_id].append([lon, lat, dist or 0.0])
-
-        logger.info(f"Données actives chargées: {len(trips)} trips, {len(shapes)} shapes")
-        return {"trips": trips, "stop_times": stop_times, "shapes": shapes, "stops": _stops_cache}
+        logger.info(f"Données actives chargées: {len(trips)} trips")
+        return {"trips": trips, "stop_times": stop_times, "shapes": {}, "stops": _stops_cache}
 
     except Exception as e:
         logger.error(f"Erreur chargement données actives GTFS: {e}")
