@@ -1,97 +1,145 @@
-# 🗺️ Carte du bruit en France - Données semi temps réel
+# 🗺️ Carte du bruit en France — Données semi temps réel
 
-Projet de visualisation en temps réel des niveaux de bruit aérien, routier et ferroviaire au-dessus de la France, utilisant Kafka, TimescaleDB et OpenSky Network.
+Visualisation en quasi temps réel des niveaux de bruit aérien, routier et ferroviaire au-dessus de la France, via Kafka, TimescaleDB et plusieurs sources de données publiques.
 
 ## 📋 Idée d'origine
-Le bruit est un fléau qui génère stress et fatigue. Mais est-ce qu’on se rend vraiment compte du bruit qui nous entoure ?
 
-Les cartes de bruit existantes reposent sur des modèles de propagation acoustique (NMPB, CNOSSOS-EU), alimentés par des données très précises (trafic, géométrie, topographie). Mais ce sont des snapshots statiques, basés sur des comptages périodiques et à ma connaissance, il n’existe pas vraiment de carte en temps réel, c’est de là qu’est né ce projet.
+Le bruit est un fléau qui génère stress et fatigue. Mais est-ce qu'on se rend vraiment compte du bruit qui nous entoure ?
 
-## 📋 Architecture
+Les cartes de bruit existantes reposent sur des modèles de propagation acoustique (NMPB, CNOSSOS-EU), alimentés par des données très précises (trafic, géométrie, topographie). Ce sont des snapshots statiques, basés sur des comptages périodiques. À ma connaissance, il n'existe pas de carte en temps réel — c'est de là qu'est né ce projet.
+
+## 🌐 Démonstration
+
+https://www.cartedubruit.com
+
+## 📐 Architecture
 
 ```
-OpenSky API → Producer (Python) → Kafka → Processor → TimescaleDB → API (FastAPI) → Frontend (Leaflet.js)
+ADS-B One API ──┐
+TomTom API    ──┼──→ Producers (Python) ─→ Kafka ─→ Processors (Python) ─→ TimescaleDB ─→ API (FastAPI) ─→ Frontend (Vite) 
+GTFS-RT SNCF  ──┘
 ```
 
-**Technologies utilisées** :
-- **Kafka** : Streaming de données en temps réel
-- **TimescaleDB** : Base de données PostgreSQL optimisée pour les séries temporelles
-- **SQLAlchemy** : ORM Python pour interactions avec la base de données
-- **psycopg3** : Driver PostgreSQL
-- **FastAPI** : API REST
-- **Leaflet.js** : Cartographie interactive
+Trois flux parallèles :
+- **Aérien** (`aircraft-producer` / `aircraft-processor`) : positions ADS-B via adsb.one, calcul bruit en grille 0.1°
+- **Routier** (`road-producer` / `road-processor`) : trafic TomTom par segments autoroutiers, calcul bruit routier
+- **Ferroviaire** (`railway-producer` / `railway-processor`) : positions GTFS-RT SNCF, calcul bruit ferroviaire
 
-## 🚀 Installation rapide
+**Stack technique** :
+- **Kafka** (Confluent 7.5) : broker de streaming temps réel
+- **TimescaleDB** : PostgreSQL optimisé séries temporelles
+- **FastAPI** : API REST avec cache TTL in-process
+- **Vite + Leaflet.js** : frontend cartographique interactif
+- **pfaedle** : association des tracés géographiques aux trips ferroviaires (GTFS)
+
+## 🚀 Installation
 
 ### Prérequis
-- Docker, Docker Compose, XZ et Unzip installés
-- Au moins 6 GB de RAM disponibles
+
+- Docker et Docker Compose installés
+- `xz` et `unzip` disponibles
+- Au moins 6 Go de RAM disponibles
+- Clés API : [MapTiler](https://www.maptiler.com/) et [TomTom](https://developer.tomtom.com/)
 
 ### Structure des dossiers
+
+<details>
+<summary>Afficher ⬇️</summary>
+<br>
 
 ```
 noise-map/
 ├── api/
 │   ├── Dockerfile
-│   ├── requirements.txt
-│   └── main.py
-├── data/
+│   ├── main.py                  # FastAPI — endpoints REST
+│   └── requirements.txt
 ├── database-init/
 │   ├── db-backup/
-│   │   └── noise_map_YYYYmmdd.sql.gz
+│   │   └── noise_map_YYYYMMDD.sql.gz   # Dump tables de référence statiques
+│   ├── gtfs-statique/           # Fichiers GTFS SNCF (stops, routes, shapes…)
 │   ├── shapes-import/
-│   │   └── shapes.tar.xz
-│   ├── db-init.sh
-│   └── db-init.sql
+│   │   └── shapes.tar.xz        # Tracés ferroviaires générés par pfaedle
+│   ├── db-init.sh               # Script d'initialisation complet
+│   └── db-init.sql              # Schéma PostgreSQL
 ├── frontend/
+│   ├── src/
+│   │   ├── components/          # Composants React
+│   │   ├── features/            # Logique métier par domaine
+│   │   ├── hooks/               # Hooks React personnalisés
+│   │   ├── lib/                 # Utilitaires
+│   │   └── App.tsx
 │   ├── Dockerfile
+│   ├── nginx.conf
 │   ├── index.html
-│   └──  app.js
+│   └── package.json
 ├── gtfs-updater/
 │   ├── Dockerfile
-│   ├── assign-shapes.py
-│   ├── import-gtfs.py
-│   └── updater.py
+│   ├── import-gtfs.py           # Import GTFS SNCF → rail_trips, rail_stop_times
+│   ├── assign-shapes.py         # Matching géométrique trips → rail_shapes
+│   ├── updater.py               # Scheduler quotidien (18h)
+│   └── requirements.txt
 ├── processors/
-│   ├── Dockerfile
-│   ├── requirements.txt
-│   └── processor.py
+│   ├── aircraft-processor/
+│   │   ├── aircraft-processor.py
+│   │   ├── Dockerfile
+│   │   └── requirements.txt
+│   ├── railway-processor/
+│   │   ├── railway-processor.py
+│   │   ├── Dockerfile
+│   │   └── requirements.txt
+│   └── road-processor/
+│       ├── road-processor.py
+│       ├── Dockerfile
+│       └── requirements.txt
 ├── producers/
-│   ├── Dockerfile
-│   ├── requirements.txt
-│   └── producer.py
-├── .env
+│   ├── aircraft-producer/
+│   │   ├── aircraft-producer.py
+│   │   ├── Dockerfile
+│   │   └── requirements.txt
+│   ├── railway-producer/
+│   │   ├── railway-producer.py
+│   │   ├── Dockerfile
+│   │   └── requirements.txt
+│   └── road-producer/
+│       ├── road-producer.py
+│       ├── Dockerfile
+│       └── requirements.txt
+├── data/
+│   └── timescaledb/             # Données PostgreSQL persistées (hors git)
+├── .env_example
 ├── docker-compose.yml
 ├── Makefile
 └── README.md
-
-
-
 ```
+
+</details>
+
+<br>
 
 ### Démarrage
 
 1. **Cloner le dépôt**
 
-2. **Créer un fichier `.env`** à partir du fichier exemple et **renseigner vos clés API** `Maptiler` et `TomTom` :
+2. **Créer le fichier `.env`** à partir du fichier exemple et renseigner vos clés API :
 ```bash
 cp .env_example .env
 ```
 
-3. **Initialiser la base de données** (une seule fois sur une nouvelle machine) :
+3. **Initialiser la base de données** (une seule fois, sur nouvelle machine) :
 ```bash
 make db-init
 ```
 Cette commande enchaîne automatiquement :
-- Démarrage de TimescaleDB
-- Création du schéma (`db-init.sql`)
-- Restauration des données de référence (avions, ferroviaire hors tracés)
-- Décompression de `shapes.tar.xz` et import des tracés ferroviaires
-- Téléchargement du GTFS SNCF et import des horaires trains
+- Démarrage de TimescaleDB et création du schéma (`db-init.sql`)
+- Restauration des données de référence statiques (bruit MADB/FAA, segments routiers, arrêts et lignes ferroviaires)
+- Import des tracés ferroviaires depuis `shapes.tar.xz` (générés par pfaedle)
+- Association des tracés aux trips (`assign-shapes.py`)
+- Téléchargement du GTFS SNCF et import des horaires trains du jour
 
 4. **Lancer l'infrastructure** :
 ```bash
 make start
+```
 
 5. **Vérifier que tout fonctionne** :
 ```bash
@@ -99,186 +147,302 @@ make status
 
 # Logs par service
 make logs-aircraft-producer
+make logs-railway-producer
+make logs-road-producer
 make logs-api
 ```
 
 6. **Accéder à l'application** :
-- Frontend : http://localhost:3000
-- API : http://localhost:8000
-- Documentation API : http://localhost:8000/docs
+   - Frontend : http://localhost:3000
+   - API : http://localhost:8000
+   - Documentation API : http://localhost:8000/docs
 
-## 🛠️ Services
+## 🛠️ Services Docker
 
-### Kafka (port 9092)
-Gère le flux de données en temps réel des positions d'avions.
+| Conteneur | Port hôte | Rôle |
+|---|---|---|
+| `zookeeper` | 2181 | Coordination Kafka |
+| `kafka` | 9092 | Broker de streaming |
+| `timescaledb` | 5433 | PostgreSQL + TimescaleDB |
+| `noise-api` | 8000 | API REST FastAPI |
+| `noise-frontend` | 3000 | Frontend Vite/Leaflet (nginx) |
+| `aircraft-producer` | — | Positions ADS-B → Kafka |
+| `aircraft-processor` | — | Kafka → bruit aérien → DB |
+| `road-producer` | — | Trafic TomTom → Kafka |
+| `road-processor` | — | Kafka → bruit routier → DB |
+| `railway-producer` | — | GTFS-RT SNCF → Kafka |
+| `railway-processor` | — | Kafka → bruit ferroviaire → DB |
+| `gtfs-updater` | — | Import GTFS SNCF quotidien à 18h |
 
-### TimescaleDB (port 5432)
-Base de données optimisée pour les séries temporelles avec SQLAlchemy ORM.
-- User: `noiseuser`
-- Password: `noisepass`
-- Database: `noise_map`
-- Driver: `psycopg` (version 3)
+> TimescaleDB expose le port **5433** sur l'hôte, mais les conteneurs communiquent entre eux sur le port 5432.
 
-### Producer
-Récupère les données OpenSky toutes les 30 secondes pour la zone France et les envoie à Kafka.
+## 🗄️ Base de données
 
-### Processor
-Consomme les données Kafka, calcule les niveaux de bruit et stocke dans TimescaleDB.
+### Tables hypertables (séries temporelles, rétention 7 jours)
 
-### API FastAPI
-Expose les données via REST API.
+| Table | Description |
+|---|---|
+| `aircraft_positions` | Positions brutes des avions |
+| `aircraft_noise_levels` | Bruit aérien agrégé par cellule de grille |
+| `railway_positions` | Positions des trains |
+| `railway_noise_levels` | Bruit ferroviaire par cellule |
+| `road_noise_levels` | Bruit routier par segment |
 
-### Frontend
-Interface web avec carte interactive Leaflet.
+### Tables de référence statiques (importées une seule fois)
 
-### GTFS Updater
-Met à jour automatiquement les horaires ferroviaires (`rail_trips`, `rail_stop_times`) chaque jour à 18h en téléchargeant le GTFS SNCF. Le plan de transport théorique intègre les adaptations connues la veille à 17h (perturbations, mouvements sociaux).
+| Table | Description |
+|---|---|
+| `rail_stops` | Arrêts ferroviaires GTFS SNCF |
+| `rail_routes` | Lignes ferroviaires GTFS SNCF |
+| `rail_shapes` | Tracés géographiques des lignes (~461 Mo, générés par pfaedle) |
+| `road_segments_ref` | Géométries OSM des segments autoroutiers |
+| `madb_noise_ref` | Référentiel bruit MADB |
+| `icao_type_mapping` | Correspondance types avions ICAO |
+| `icao_noise_pattern` | Patrons de bruit par type d'avion |
 
-> Les tracés géographiques (`rail_shapes`) sont statiques et ne sont pas re-téléchargés : ils ont été générés via pfaedle et importés lors de l'initialisation.
+### Tables rechargées quotidiennement
+
+| Table | Description |
+|---|---|
+| `rail_trips` | Voyages du jour (GTFS SNCF) |
+| `rail_stop_times` | Horaires aux arrêts |
 
 ## 📊 Endpoints API
 
-- `GET /api/noise/current` - Niveaux de bruit actuels
-- `GET /api/aircraft/current` - Positions actuelles des avions
-- `GET /api/noise/history?grid_id=XX` - Historique d'une zone
-- `GET /api/stats` - Statistiques globales
+| Méthode | Endpoint | Description | Cache |
+|---|---|---|---|
+| `GET` | `/api/aircrafts/positions` | Avions en vol (fenêtre 2 min) | 5 s |
+| `GET` | `/api/roads/segments_noise` | Segments routiers ≥ 67 dB | 15 s |
+| `GET` | `/api/railways/positions` | Trains actifs (fenêtre 5 min) | 10 s |
+| `GET` | `/api/railways/shapes` | Tracés GTFS des trains actifs (gzip) | 2 min |
+| `GET` | `/api/noise/history` | Historique bruit aérien par cellule (`?grid_id=XX`) | — |
+| `GET` | `/api/stats` | Statistiques globales des 3 réseaux | — |
+
+Le paramètre `?detail=low\|high` est disponible sur `/api/railways/shapes` pour adapter la résolution des tracés.
 
 ## 🎨 Fonctionnalités
 
-- ✈️ Visualisation en temps réel des avions au-dessus de la France
+- ✈️ Visualisation en temps réel des avions, trains et segments routiers bruyants
 - 🔊 Carte thermique du bruit avec code couleur
-- 📈 Statistiques en direct (nombre d'avions, bruit moyen/max)
-- 🕐 Mise à jour automatique toutes les 10 secondes
-- 🗺️ Carte interactive (zoom, déplacement)
-- 📍 Informations détaillées au clic (popup)
+- 🚆 Tracés des lignes ferroviaires avec correspondance géométrique multi-arrêts
+- 📈 Statistiques en direct (nombre de véhicules, bruit moyen/max)
+- 🗺️ Carte interactive (zoom, déplacement, popup au clic)
+- 🔄 Mise à jour automatique selon les TTL par flux
 
 ## 🔧 Configuration avancée
 
-### Modifier l'intervalle de mise à jour OpenSky
+### Zooms OpenStreetMap
 
-Dans `docker-compose.yml`, section `aircraft-producer` :
-```yaml
-environment:
-  OPENSKY_UPDATE_INTERVAL: 30  # secondes
-```
-
-### Changer la zone géographique
-
-Par défaut, la France métropolitaine. Pour modifier, éditer `FRANCE_BBOX` :
-```yaml
-# Format: lon_min,lat_min,lon_max,lat_max
-FRANCE_BBOX: "-5.0,41.0,10.0,51.5"
-```
-
-### Ajuster la taille de la grille de bruit
-
-Dans `processor/processor.py` :
+Par défaut, le zoom minimum (le plus éloigné) de la carte est à `6` et le zoom maximum est à `10`. Pour les modifier, éditer dans le frontend `Map.txt` et faire un rebuild `make build-frontend` :
 ```python
-GRID_SIZE = 0.1  # 0.1° ≈ 10km
+MIN_ZOOM = 6
+MAX_ZOOM = 10
 ```
 
-## 📦 Volumes Docker
+### Fréquence de récupération des données via l'API TomTom
+Par défaut, les données sont récupérées sur TomTom toutes les 5 minutes. Pour modifier la fréquence, éditer `POLL_INTERVAL` dans le `road-producer` :
+```python
+POLL_INTERVAL = 300
+```
 
-Les données sont persistées dans des volumes Docker :
-- `zookeeper-data` : Données Zookeeper
-- `kafka-data` : Données Kafka
-- `timescale-data` : Données TimescaleDB
+### Fréquence de récupération des données via GTFS-RT 
+Par défaut, les données sont récupérées sur TomTom toutes les 30 secondes sachant que les données sont mises à jour toutes les 2 minutes pour les trains circulant dans les 60 prochaines minutes. Pour modifier la fréquence, éditer `POLL_INTERVAL` dans le `railway-producer` :
+```python
+POLL_INTERVAL = 30
+```
 
-Pour tout réinitialiser :
+## 📦 Commandes Makefile
+
 ```bash
-docker-compose down -v
+# Démarrage / arrêt
+make start              # Lance tous les services
+make stop               # Arrête les services
+make status             # Statut des conteneurs
+
+# Initialisation (nouvelle machine uniquement)
+make db-init            # Schéma + restore + shapes + GTFS
+
+# Rebuild d'un service
+make build-api
+make build-frontend
+make build-aircraft-producer
+make build-railway-producer
+make build-road-producer
+
+# Logs
+make logs-api
+make logs-kafka
+make logs-aircraft-producer
+make logs-railway-producer
+make logs-road-producer
+
+# Shell PostgreSQL
+make db-shell
+
+# Test rapide de l'API
+make test-api
+
+# Backup / restore des tables statiques
+make db-backup
+make db-restore FILE=noise_map_YYYYMMDD.sql.gz
+
+# Import de données de référence (si reset Kafka)
+make import-all         # madb + icao + patterns + refresh vue matérialisée
+
+# Matching géométrique trips → shapes
+make assign-shapes
 ```
 
 ## 🐛 Dépannage
 
 ### Les données ne s'affichent pas
 
-1. Vérifier que tous les conteneurs sont up :
+1. Vérifier que tous les conteneurs sont actifs :
 ```bash
-docker-compose ps
+docker ps
 ```
 
-2. Vérifier les logs du producer :
+2. Vérifier les logs du producer concerné :
 ```bash
-docker logs aircraft-producer
+make logs-aircraft-producer
+make logs-railway-producer
+make logs-road-producer
 ```
 
-Le résultat devrait être : `✈️ XX avions détectés au-dessus de la France`
-
-3. Vérifier la base de données :
+3. Vérifier les logs de Kafka :
 ```bash
-docker exec -it timescaledb psql -U noiseuser -d noise_map
-SELECT COUNT(*) FROM aircraft_positions;
+make logs-kafka
 ```
 
-### Erreur de connexion Kafka
-
-Kafka prend 30-40 secondes à démarrer. Attendre un peu puis :
+4. Vérifier les logs de l'API :
 ```bash
-docker-compose restart aircraft-producer noise-processor
+make logs-api
 ```
 
-### Erreur CORS dans le navigateur
+5. Interroger directement la base :
+```bash
+make db-shell
+# Puis dans psql :
+SELECT COUNT(*) FROM aircraft_positions WHERE time > now() - interval '5 minutes';
+SELECT COUNT(*) FROM railway_positions WHERE time > now() - interval '10 minutes';
+```
 
-Si vous accédez au frontend depuis un autre domaine que localhost, modifier le CORS dans `api/main.py`.
+### Kafka ne démarre pas
+
+Kafka prend 30 à 40 secondes à être prêt. Les producers redémarrent automatiquement (`restart: unless-stopped`). En cas de problème persistant :
+```bash
+docker compose restart kafka
+```
+
+### Trains sans tracé sur la carte
+
+Le matching shapes est effectué par `assign-shapes.py` au moment du `db-init`. Pour le relancer manuellement :
+```bash
+make assign-shapes
+```
 
 ## 📈 Évolutions possibles
 
-- [ ] Intégrer les capteurs de bruit réels des villes
+- [ ] Intégrer des capteurs de bruit réels (IoT, Bruitparif)
+- [ ] Intégrer la météo
 - [ ] Prédiction des niveaux de bruit (ML)
-- [ ] Historique long terme et analyses
-- [ ] Alertes sur zones dépassant un seuil
+- [ ] Historique long terme et analyses statistiques
+- [ ] Alertes sur zones dépassant un seuil configurable
 - [ ] Support multi-pays
 - [ ] Mode nuit/jour avec variation du bruit
-- [ ] Export des données (CSV, PDF)
+- [ ] Export des données (CSV, GeoJSON)
 
 ## 📝 Limites actuelles
 
-- OpenSky Network API gratuite : limitée à 400 requêtes/jour (avec compte) ou 100/jour (anonyme)
-- Le calcul du bruit est une estimation simplifiée
-- Grille fixe de 10km (pourrait être dynamique selon le zoom)
+### Sources de données
 
-## 🤝 Pistes d'améliorations
-- Optimiser l'algorithme de calcul du bruit
-- Améliorer le calcul de la propagation du bruit en tenant compte de la météo, du vent, des aménagements déjà mis en place, etc...
-- Obtenir des données plus précises via des API payantes ou des données non publiques
-- Ajouter d'autres sources de données comme les travaux
-- Améliorer l'UI/UX
-- Réduire le délai d'obtention des données pour un affichage quasi temps réel
-- Ajouter des tests unitaires
+- **ADS-B One** : agrégateur communautaire de récepteurs ADS-B, sans limite de requêtes connue, mais la couverture dépend de la densité des récepteurs bénévoles — zones rurales ou en altitude potentiellement sous-représentées.
+- **TomTom** : couverture limitée aux tronçons autoroutiers et voies rapides (`motorway` / `trunk`). Les routes secondaires, départementales et urbaines ne sont pas incluses.
+- **GTFS-RT SNCF** : données officielles SNCF, mises à jour quotidiennement à 18h. Les perturbations de dernière minute (suppression de train, changement de voie) peuvent ne pas être reflétées immédiatement.
 
+### Modèles de bruit — ce qu'ils font et leurs limites
 
-## Exemples d'utilisation de la carte
-Que faire des données ? Rien n'empêche de créer un dataset de toutes les données enregistrées sur une assez longue période pour créer ensuite des couloirs de bruits et identifier les zones les plus exogènes
+#### ✈️ Aérien — méthode NPD (ECAC Doc 29 / EASA MAdB)
+
+Le calcul s'appuie sur les données de certification acoustique de la base **EASA MAdB** (Motor Aircraft Data Base), qui fournit pour chaque type ICAO un niveau de référence mesuré à 300 m à 160 nœuds.
+
+La formule appliquée est :
+
+```
+L(dBA) = L_ref + ΔL_distance + ΔL_atmosphérique + ΔL_vitesse
+
+ΔL_distance      = -20 · log10(altitude / 300)     — atténuation géométrique sphérique
+ΔL_atmosphérique = -0.002 · altitude               — absorption de l'air (si altitude > 500 m)
+ΔL_vitesse       =   3 · log10(v / 82 m/s)         — correction selon la vitesse réelle
+```
+
+La phase de vol (survol vs approche) est déduite du taux vertical. Pour les types sans données MAdB, un fallback par catégorie ICAO (A1–A5, de 65 à 85 dB de référence) est utilisé.
+
+**Limites** : la distance horizontale entre l'avion et la cellule de grille est ignorée (simplification "avion à la verticale"). Le modèle ne prend pas en compte l'orientation de l'avion, la météo, ni le masquage par le relief.
+
+#### 🚗 Routier — méthode NMPB-Routes-2008 (Sétra 2009)
+
+Méthode normalisée française pour le bruit de trafic routier. Elle distingue deux catégories de véhicules (VL et PL) avec des proportions de poids lourds selon le type de route (10 % sur autoroute, 7 % sur voie rapide).
+
+La puissance acoustique par type de véhicule est calculée en combinant deux termes :
+
+```
+L_r  = bruit de roulement  (VL : 55.4 + 20.1·log10(v/90),  PL : 63.4 + 20.0·log10(v/80))
+L_m  = bruit moteur        (VL : formule par palier de vitesse, PL : 50.4 + 3·log10(v/80))
+L_W  = addition énergétique(L_r, L_m)   — 10·log10(10^(L_r/10) + 10^(L_m/10))
+```
+
+La puissance totale de la source linéaire (débit × L_W) est ensuite propagée à 25 m selon un modèle de source cylindrique :
+
+```
+L(25m) = L_W/m - 10·log10(2·π·25)
+```
+
+**Limites** : propagation en champ libre sans réflexions ni absorption (pas de bâtiments, pas de merlons). La déclivité et le revêtement (supposé R2 standard) sont fixes. Le débit horaire TomTom est une instantanée, pas une moyenne journalière.
+
+#### 🚆 Ferroviaire — méthode CRN/CNOSSOS-EU
+
+Inspirée de la méthode CRN (Calcul de la propagation du bruit des infrastructures ferroviaires) et du cadre européen CNOSSOS, avec des niveaux de référence différenciés par type de train SNCF :
+
+| Type | L_ref (dB) | v_ref (km/h) |
+|---|---|---|
+| TGV | 92 | 300 |
+| IC (Intercités) | 82 | 200 |
+| TER | 80 | 140 |
+| FRET | 88 | 100 |
+
+```
+L(dBA) = L_ref + 30·log10(v / v_ref) + (-10·log10(d / 25))
+
+correction vitesse    = 30·log10(v / v_ref)   — exposant 30 typique rail (vs 20 route)
+atténuation distance  = -10·log10(d / 25)     — propagation cylindrique depuis la voie
+```
+
+**Limites** : le type de train est extrait du `trip_id` GTFS-RT — les trips non labellisés tombent sur le profil TER par défaut. La vitesse est issue de l'interpolation GTFS, pas d'une mesure réelle. Le modèle ne tient pas compte du type de voie (ballastée vs dalle béton), ni du matériel roulant précis.
+
+## 💡 Cas d'usage
 
 ### Immobilier & urbanisme
-  - Promoteurs immobiliers : évaluer l'impact sonore avant de lancer un projet de construction
-  - Collectivités locales : identifier les zones à équiper en double vitrage, murs anti-bruit, ouvégétalisation 
-  - PLU / études d'impact : alimenter les dossiers réglementaires (la directive européenne 2002/49/CE impose déjà des cartes de bruit qui semblent être des snapshots statiques basés sur des comptages périodiques)
+- Évaluer l'impact sonore avant de lancer un projet de construction
+- Identifier les zones à équiper en double vitrage ou murs anti-bruit
+- Alimenter les dossiers réglementaires (directive européenne 2002/49/CE)
 
-### Santé publique 
-  - Épidémiologie : croiser les zones d'exposition chronique avec des données de santé (hypertension, troubles du sommeil), ce qui est un sujet de recherche actif à l'OMS
-  - Médecins / mutuelles : identifier les populations à risque selon leur adresse
-  - Maternités / pédiatres : exposition au bruit des nourrissons et enfants
-  - Etablissements de soins / maisons de retraite : identifier les zons d'exposition au bruit
+### Santé publique
+- Croiser les zones d'exposition chronique avec des données de santé (hypertension, troubles du sommeil)
+- Identifier les populations à risque selon leur localisation
 
 ### Transport & mobilité
-  - Optimisation des couloirs aériens : montrer à la DGAC ou aux aéroports quelles trajectoires sont les plus impactantes sur les zones habitées   
-  - Horaires ferroviaires : identifier les tronçons bruyants la nuit pour prioriser les travaux d'isolation
-  - Planification routière : comparer l'impact de déviations ou de nouvelles infrastructures avant construction
+- Optimiser les couloirs aériens en montrant les trajectoires les plus impactantes
+- Prioriser les travaux d'isolation sur les tronçons ferroviaires bruyants la nuit
+- Comparer l'impact de déviations routières avant construction
 
-### Qualité de vie & usage grand public  
-  - Applications de running / randonnée : proposer des itinéraires calmes
-  - Parents : trouver des parcs ou zones de jeux loin du bruit
-  - Tourisme : recommander des hébergements calmes avec données objectives plutôt que subjectives  
+### Qualité de vie & grand public
+- Proposer des itinéraires calmes pour le running ou la randonnée
+- Recommander des hébergements calmes avec données objectives
 
-### Entreprises & RH
-  - Choix d'implantation d'entreprise : bureaux dans des zones calmes pour le bien-être des salariés 
-
-### Recherche & institutionnel
-  - SNCF / RATP : mesurer l'impact réel de leurs réseaux vs les estimations statiques actuelles
-  - Aéroports de Paris : suivi en temps réel des engagements de réduction du bruit 
-  - Chercheurs en acoustique urbaine : dataset sur le long terme pour détecter des couloirs de bruits
+### Recherche
+- Constituer un dataset long terme pour détecter des couloirs de bruit
+- Mesurer l'impact réel des réseaux vs les estimations statiques actuelles
 
 ## 📄 Licence
 

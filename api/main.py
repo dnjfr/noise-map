@@ -99,21 +99,6 @@ class RoadNoiseLevel(Base):
     traffic_flow = Column(Integer)
     average_speed = Column(Float)
 
-class RoadSegmentRef(Base):
-    __tablename__ = "road_segments_ref"
-
-    code_pme = Column(String(20), primary_key=True)
-    axe = Column(String(20))
-    source = Column(String(10))
-    lat_deb = Column(Float)
-    lon_deb = Column(Float)
-    lat_fin = Column(Float)
-    lon_fin = Column(Float)
-    longueur = Column(Integer)
-    nb_voies = Column(Integer)
-    sens_cardinal = Column(String(20))
-    geom_osm = Column(JSON)
-
 class RailwayPosition(Base):
     __tablename__ = "railway_positions"
 
