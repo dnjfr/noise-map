@@ -106,7 +106,7 @@ if [[ "$MAPPING_COUNT" -gt 0 ]]; then
   echo "      rail_route_shapes déjà remplie ($MAPPING_COUNT entrées) — restaurée depuis backup."
 else
   echo "      rail_route_shapes vide — calcul du mapping géométrique (1-2 min)..."
-  docker compose run --rm gtfs-updater python3 assign_shapes.py
+  docker compose run --rm gtfs-updater python3 assign-shapes.py
   echo "      Mapping calculé."
 fi
 

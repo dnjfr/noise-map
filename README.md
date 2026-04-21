@@ -73,7 +73,7 @@ noise-map/
 
 1. **Cloner le dépôt**
 
-2. **Créer un fichier `.env`** à partir du fichier exemple et renseigner vos clés API Maptiler et TomTom :
+2. **Créer un fichier `.env`** à partir du fichier exemple et **renseigner vos clés API** `Maptiler` et `TomTom` :
 ```bash
 cp .env_example .env
 ```
