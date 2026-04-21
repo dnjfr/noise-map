@@ -1,4 +1,4 @@
-# 🗺️ Carte du bruit en France — Données semi temps réel
+# 🗺️ Carte du bruit en France - Données semi temps réel
 
 Visualisation en quasi temps réel des niveaux de bruit aérien, routier et ferroviaire au-dessus de la France, via Kafka, TimescaleDB et plusieurs sources de données publiques.
 
@@ -6,7 +6,7 @@ Visualisation en quasi temps réel des niveaux de bruit aérien, routier et ferr
 
 Le bruit est un fléau qui génère stress et fatigue. Mais est-ce qu'on se rend vraiment compte du bruit qui nous entoure ?
 
-Les cartes de bruit existantes reposent sur des modèles de propagation acoustique (NMPB, CNOSSOS-EU), alimentés par des données très précises (trafic, géométrie, topographie). Ce sont des snapshots statiques, basés sur des comptages périodiques. À ma connaissance, il n'existe pas de carte en temps réel — c'est de là qu'est né ce projet.
+Les cartes de bruit existantes reposent sur des modèles de propagation acoustique (NMPB, CNOSSOS-EU), alimentés par des données très précises (trafic, géométrie, topographie). Ce sont des snapshots statiques, basés sur des comptages périodiques. À ma connaissance, il n'existe pas de carte en temps réel - c'est de là qu'est né ce projet.
 
 ## 🌐 Démonstration
 
@@ -51,7 +51,7 @@ Trois flux parallèles :
 noise-map/
 ├── api/
 │   ├── Dockerfile
-│   ├── main.py                  # FastAPI — endpoints REST
+│   ├── main.py                  # FastAPI - endpoints REST
 │   └── requirements.txt
 ├── database-init/
 │   ├── db-backup/
@@ -114,7 +114,6 @@ noise-map/
 
 </details>
 
-<br>
 
 ### Démarrage
 
@@ -166,13 +165,13 @@ make logs-api
 | `timescaledb` | 5433 | PostgreSQL + TimescaleDB |
 | `noise-api` | 8000 | API REST FastAPI |
 | `noise-frontend` | 3000 | Frontend Vite/Leaflet (nginx) |
-| `aircraft-producer` | — | Positions ADS-B → Kafka |
-| `aircraft-processor` | — | Kafka → bruit aérien → DB |
-| `road-producer` | — | Trafic TomTom → Kafka |
-| `road-processor` | — | Kafka → bruit routier → DB |
-| `railway-producer` | — | GTFS-RT SNCF → Kafka |
-| `railway-processor` | — | Kafka → bruit ferroviaire → DB |
-| `gtfs-updater` | — | Import GTFS SNCF quotidien à 18h |
+| `aircraft-producer` | - | Positions ADS-B → Kafka |
+| `aircraft-processor` | - | Kafka → bruit aérien → DB |
+| `road-producer` | - | Trafic TomTom → Kafka |
+| `road-processor` | - | Kafka → bruit routier → DB |
+| `railway-producer` | - | GTFS-RT SNCF → Kafka |
+| `railway-processor` | - | Kafka → bruit ferroviaire → DB |
+| `gtfs-updater` | - | Import GTFS SNCF quotidien à 18h |
 
 > TimescaleDB expose le port **5433** sur l'hôte, mais les conteneurs communiquent entre eux sur le port 5432.
 
@@ -215,8 +214,8 @@ make logs-api
 | `GET` | `/api/roads/segments_noise` | Segments routiers ≥ 67 dB | 15 s |
 | `GET` | `/api/railways/positions` | Trains actifs (fenêtre 5 min) | 10 s |
 | `GET` | `/api/railways/shapes` | Tracés GTFS des trains actifs (gzip) | 2 min |
-| `GET` | `/api/noise/history` | Historique bruit aérien par cellule (`?grid_id=XX`) | — |
-| `GET` | `/api/stats` | Statistiques globales des 3 réseaux | — |
+| `GET` | `/api/noise/history` | Historique bruit aérien par cellule (`?grid_id=XX`) | - |
+| `GET` | `/api/stats` | Statistiques globales des 3 réseaux | - |
 
 Le paramètre `?detail=low\|high` est disponible sur `/api/railways/shapes` pour adapter la résolution des tracés.
 
@@ -356,13 +355,13 @@ make assign-shapes
 
 ### Sources de données
 
-- **ADS-B One** : agrégateur communautaire de récepteurs ADS-B, sans limite de requêtes connue, mais la couverture dépend de la densité des récepteurs bénévoles — zones rurales ou en altitude potentiellement sous-représentées.
+- **ADS-B One** : agrégateur communautaire de récepteurs ADS-B, sans limite de requêtes connue, mais la couverture dépend de la densité des récepteurs bénévoles - zones rurales ou en altitude potentiellement sous-représentées.
 - **TomTom** : couverture limitée aux tronçons autoroutiers et voies rapides (`motorway` / `trunk`). Les routes secondaires, départementales et urbaines ne sont pas incluses.
 - **GTFS-RT SNCF** : données officielles SNCF, mises à jour quotidiennement à 18h. Les perturbations de dernière minute (suppression de train, changement de voie) peuvent ne pas être reflétées immédiatement.
 
-### Modèles de bruit — ce qu'ils font et leurs limites
+### Modèles de bruit - ce qu'ils font et leurs limites
 
-#### ✈️ Aérien — méthode NPD (ECAC Doc 29 / EASA MAdB)
+#### ✈️ Aérien - méthode NPD (ECAC Doc 29 / EASA MAdB)
 
 Le calcul s'appuie sur les données de certification acoustique de la base **EASA MAdB** (Motor Aircraft Data Base), qui fournit pour chaque type ICAO un niveau de référence mesuré à 300 m à 160 nœuds.
 
@@ -371,16 +370,16 @@ La formule appliquée est :
 ```
 L(dBA) = L_ref + ΔL_distance + ΔL_atmosphérique + ΔL_vitesse
 
-ΔL_distance      = -20 · log10(altitude / 300)     — atténuation géométrique sphérique
-ΔL_atmosphérique = -0.002 · altitude               — absorption de l'air (si altitude > 500 m)
-ΔL_vitesse       =   3 · log10(v / 82 m/s)         — correction selon la vitesse réelle
+ΔL_distance      = -20 · log10(altitude / 300)     - atténuation géométrique sphérique
+ΔL_atmosphérique = -0.002 · altitude               - absorption de l'air (si altitude > 500 m)
+ΔL_vitesse       =   3 · log10(v / 82 m/s)         - correction selon la vitesse réelle
 ```
 
 La phase de vol (survol vs approche) est déduite du taux vertical. Pour les types sans données MAdB, un fallback par catégorie ICAO (A1–A5, de 65 à 85 dB de référence) est utilisé.
 
 **Limites** : la distance horizontale entre l'avion et la cellule de grille est ignorée (simplification "avion à la verticale"). Le modèle ne prend pas en compte l'orientation de l'avion, la météo, ni le masquage par le relief.
 
-#### 🚗 Routier — méthode NMPB-Routes-2008 (Sétra 2009)
+#### 🚗 Routier - méthode NMPB-Routes-2008 (Sétra 2009)
 
 Méthode normalisée française pour le bruit de trafic routier. Elle distingue deux catégories de véhicules (VL et PL) avec des proportions de poids lourds selon le type de route (10 % sur autoroute, 7 % sur voie rapide).
 
@@ -389,7 +388,7 @@ La puissance acoustique par type de véhicule est calculée en combinant deux te
 ```
 L_r  = bruit de roulement  (VL : 55.4 + 20.1·log10(v/90),  PL : 63.4 + 20.0·log10(v/80))
 L_m  = bruit moteur        (VL : formule par palier de vitesse, PL : 50.4 + 3·log10(v/80))
-L_W  = addition énergétique(L_r, L_m)   — 10·log10(10^(L_r/10) + 10^(L_m/10))
+L_W  = addition énergétique(L_r, L_m)   - 10·log10(10^(L_r/10) + 10^(L_m/10))
 ```
 
 La puissance totale de la source linéaire (débit × L_W) est ensuite propagée à 25 m selon un modèle de source cylindrique :
@@ -400,7 +399,7 @@ L(25m) = L_W/m - 10·log10(2·π·25)
 
 **Limites** : propagation en champ libre sans réflexions ni absorption (pas de bâtiments, pas de merlons). La déclivité et le revêtement (supposé R2 standard) sont fixes. Le débit horaire TomTom est une instantanée, pas une moyenne journalière.
 
-#### 🚆 Ferroviaire — méthode CRN/CNOSSOS-EU
+#### 🚆 Ferroviaire - méthode CRN/CNOSSOS-EU
 
 Inspirée de la méthode CRN (Calcul de la propagation du bruit des infrastructures ferroviaires) et du cadre européen CNOSSOS, avec des niveaux de référence différenciés par type de train SNCF :
 
@@ -414,11 +413,11 @@ Inspirée de la méthode CRN (Calcul de la propagation du bruit des infrastructu
 ```
 L(dBA) = L_ref + 30·log10(v / v_ref) + (-10·log10(d / 25))
 
-correction vitesse    = 30·log10(v / v_ref)   — exposant 30 typique rail (vs 20 route)
-atténuation distance  = -10·log10(d / 25)     — propagation cylindrique depuis la voie
+correction vitesse    = 30·log10(v / v_ref)   - exposant 30 typique rail (vs 20 route)
+atténuation distance  = -10·log10(d / 25)     - propagation cylindrique depuis la voie
 ```
 
-**Limites** : le type de train est extrait du `trip_id` GTFS-RT — les trips non labellisés tombent sur le profil TER par défaut. La vitesse est issue de l'interpolation GTFS, pas d'une mesure réelle. Le modèle ne tient pas compte du type de voie (ballastée vs dalle béton), ni du matériel roulant précis.
+**Limites** : le type de train est extrait du `trip_id` GTFS-RT - les trips non labellisés tombent sur le profil TER par défaut. La vitesse est issue de l'interpolation GTFS, pas d'une mesure réelle. Le modèle ne tient pas compte du type de voie (ballastée vs dalle béton), ni du matériel roulant précis.
 
 ## 💡 Cas d'usage
 
