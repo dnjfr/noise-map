@@ -41,6 +41,70 @@ Trois flux parallèles :
 - Au moins 6 Go de RAM disponibles
 - Clés API : [MapTiler](https://www.maptiler.com/) et [TomTom](https://developer.tomtom.com/)
 
+### Configurer MapTiler
+
+Le frontend utilise [MapTiler](https://www.maptiler.com/) pour afficher le fond de carte. Les cartes custom sont liées à la clé API de leur créateur et ne peuvent être exportées sans un compte payant; chaque utilisateur doit créer sa propre carte et coller l'URL dans son `.env`.
+
+#### Procédure complète pour créer une carte Maptiler
+<details>
+<summary>Afficher ⬇️</summary>
+<br>
+
+**1.** Créez votre compte Maptiler
+<img width="1000" src="/git-img/maptiler/01-creation-compte.png"/>
+
+
+**2.** Une fois votre compte créé, cliquez sur `NEW MAP`
+<img width="1000" src="/git-img/maptiler/02-new-map.png"/>
+
+
+**3.** Choisissez la carte que vous souhaitez utiliser
+<img width="1000" src="/git-img/maptiler/03-map-selection.png"/>
+
+
+**4a.** Une fois la carte choisie, cliquez sur `USE THIS MAP`, la carte est prête à être utilisée, passez à l'étape **8.**
+<img width="1000" src="/git-img/maptiler/04-winter-light.png"/>
+
+
+**4b.** Vous souhaitez peut être customiser la carte que vous souhaitez utiliser, par exemple ici, on veut utiliser la version sombre de la carte et changer les couleurs de fond, cliquez sur `CUSTOMIZE`
+<img width="1000" src="/git-img/maptiler/05-map-winter-dark.png"/>
+
+
+**5.** Changez les couleurs à votre gout puis cliquez sur `Save`
+<img width="1000" src="/git-img/maptiler/06-modifier-couleurs.png"/>
+
+
+**6.** Une nouvelle popup apparait, cliquez sur `Create and save`
+<img width="1000" src="/git-img/maptiler/07-create-save.png"/>
+
+
+**7.** A la différence d'une carte prête à l'emploi, vous devez également la rendre disponible dans votre application, cliquez sur `Publish`
+<img width="1000" src="/git-img/maptiler/08-url.png"/>
+
+
+**8.** Votre carte est prête à être utilisée
+<img width="1000" src="/git-img/maptiler/09-url.png"/>
+
+
+</details>
+
+Une fois votre carte créée, copiez l'URL du style dans votre `.env`.
+
+Vous avez plusieurs possibilités :
+- Utiliser une carte par défaut (claire ou sombre)
+- Utiliser deux cartes (par exemple une carte sombre par défaut qui sera renseignée dans la variable `VITE_MAPTILER_DEFAULT_MAP` et une carte claire qu'il faudra renseigner dans la variable `VITE_MAPTILER_LIGHT_MAP`)
+- Utiliser trois cartes (une grise qui sera la carte par défaut, une carte claire et une carte sombre)
+
+```dotenv
+# Obligatoire - seule carte nécessaire pour que le frontend s'affiche
+VITE_MAPTILER_DEFAULT_MAP=https://api.maptiler.com/maps/<your_map_id>/style.json?key=<your_api_key>
+
+# Optionnel - si renseignées, un sélecteur de style apparaît sur la carte
+# (2 cartes = 2 boutons, 3 cartes = 3 boutons)
+VITE_MAPTILER_LIGHT_MAP=https://api.maptiler.com/maps/<your_light_map_id>/style.json?key=<your_api_key>
+VITE_MAPTILER_DARK_MAP=https://api.maptiler.com/maps/<your_dark_map_id>/style.json?key=<your_api_key>
+```
+
 ### Structure des dossiers
 
 <details>
@@ -119,7 +183,7 @@ noise-map/
 
 1. **Cloner le dépôt**
 
-2. **Créer le fichier `.env`** à partir du fichier exemple et renseigner vos clés API :
+2. **Créer le fichier `.env`** à partir du fichier exemple et renseigner votre clé API TomTom et la ou les carte(s) générée(s) via MapTiler :
 ```bash
 cp .env_example .env
 ```
@@ -151,7 +215,7 @@ make logs-road-producer
 make logs-api
 ```
 
-6. **Accéder à l'application** :
+6. **Accéder à l'application en local** :
    - Frontend : http://localhost:3000
    - API : http://localhost:8000
    - Documentation API : http://localhost:8000/docs

@@ -1,5 +1,5 @@
 export const RAILWAY_LINE_COLORS: Record<string, string> = {
-  grey: '#c4bebe',
+  default: '#c4bebe',
   dark: '#a09898',
   light: '#6b6060',
 }

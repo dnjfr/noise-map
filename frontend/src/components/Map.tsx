@@ -29,15 +29,18 @@ interface Props {
   mapStyleKey: MapStyleKey
 }
 
-const MAPTILER_KEY = import.meta.env.VITE_MAPTILER_API
-
-export const MAP_STYLES = {
-  dark: `https://api.maptiler.com/maps/019d7854-60c5-7ec5-b93e-686767064756/style.json?key=${MAPTILER_KEY}`,
-  grey: `https://api.maptiler.com/maps/019ce31a-bd4b-7f1b-973a-96f15b8cc90c/style.json?key=${MAPTILER_KEY}`,
-  light: `https://api.maptiler.com/maps/019d7871-e26a-70c9-82c0-f40f23224319/style.json?key=${MAPTILER_KEY}`,
+const ALL_STYLES = {
+  default: import.meta.env.VITE_MAPTILER_DEFAULT_MAP,
+  light: import.meta.env.VITE_MAPTILER_LIGHT_MAP,
+  dark: import.meta.env.VITE_MAPTILER_DARK_MAP,
 } as const
 
-export type MapStyleKey = keyof typeof MAP_STYLES
+export const MAP_STYLES = Object.fromEntries(
+  Object.entries(ALL_STYLES).filter(([_, v]) => Boolean(v))
+) as Partial<Record<'default' | 'light' | 'dark', string>>
+
+export type MapStyleKey = 'default' | 'light' | 'dark'
+export const DEFAULT_STYLE_KEY: MapStyleKey = (Object.keys(MAP_STYLES)[0] as MapStyleKey) ?? 'default'
 
 // Zoom minimum et maximum de la carte (élargir le zoom consomme plus de crédits Maptiler)
 const MIN_ZOOM = 6
@@ -82,7 +85,7 @@ export default React.memo(function NoiseMap({ aircraftsData, roadsData, railways
 
   const roadGeoJSON = useMemo(() => getRoadGeoJSON(roadsData), [roadsData])
   const railwayLineLayer = useMemo(
-    () => getRailwayLineLayer(RAILWAY_LINE_COLORS[mapStyleKey] ?? RAILWAY_LINE_COLORS.grey),
+    () => getRailwayLineLayer(RAILWAY_LINE_COLORS[mapStyleKey] ?? RAILWAY_LINE_COLORS.default),
     [mapStyleKey],
   )
 
@@ -427,7 +430,7 @@ export default React.memo(function NoiseMap({ aircraftsData, roadsData, railways
       ref={mapRef}
       initialViewState={{ longitude: 1.888334, latitude: LAT_REF, zoom: 6 }}
       style={{ width: '100vw', height: '100vh' }}
-      mapStyle={MAP_STYLES[mapStyleKey]}
+      mapStyle={MAP_STYLES[mapStyleKey] as string}
       minZoom={MIN_ZOOM}
       maxZoom={MAX_ZOOM}
       onLoad={initCanvas}

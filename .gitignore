@@ -16,3 +16,4 @@ __pycache__
 # !database-init/db-backup/.gitkeep
 debug
 gtfs-statique
+style

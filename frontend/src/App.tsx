@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Header from './components/Header'
 import LayerToggle from './components/LayerToggle'
 import Legend from './components/Legend'
+import { DEFAULT_STYLE_KEY, MAP_STYLES } from './components/Map'
 import type { MapStyleKey } from './components/Map'
 import NoiseMap from './components/Map'
 import MapStyleToggle from './components/MapStyleToggle'
@@ -52,7 +53,7 @@ export default function App() {
   const [showAircraft, setShowAircraft] = useState(true)
   const [showRoads, setShowRoads] = useState(true)
   const [showRailways, setShowRailways] = useState(true)
-  const [mapStyleKey, setMapStyleKey] = useState<MapStyleKey>('grey')
+  const [mapStyleKey, setMapStyleKey] = useState<MapStyleKey>(DEFAULT_STYLE_KEY)
 
   return (
     <div className="relative w-screen h-screen bg-slate-950">
@@ -64,9 +65,11 @@ export default function App() {
       <div className="absolute bottom-8 right-4 z-[1000]">
         <Legend />
       </div>
-      <div className="absolute bottom-4 left-4 z-[1000]">
-        <MapStyleToggle currentStyle={mapStyleKey} onStyleChange={setMapStyleKey} />
-      </div>
+      {Object.keys(MAP_STYLES).length >= 2 && (
+        <div className="absolute bottom-4 left-4 z-[1000]">
+          <MapStyleToggle currentStyle={mapStyleKey} onStyleChange={setMapStyleKey} />
+        </div>
+      )}
       <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[1000]">
         <LayerToggle
           showAircraft={showAircraft}

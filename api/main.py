@@ -397,6 +397,9 @@ def get_railway_shapes(db: Session = Depends(get_db), detail: str = "high"):
 
         # Décimation côté SQL : on ne ramène que les points nécessaires
         # (1er point, dernier point, et 1 point tous les N)
+        # Filtre trains internationaux : le trip_id encode ::ORIGIN:DEST: avec les codes UIC.
+        # On exige que départ ET arrivée soient des gares françaises (préfixe UIC 87xxxxxxx).
+        # Ex. ::88140010:87212027: = Bruxelles→Strasbourg → exclu
         rows = db.execute(text("""
             SELECT f.trip_id, f.shape_pt_lat, f.shape_pt_lon,
                    f.shape_dist_traveled, f.shape_pt_sequence
@@ -412,15 +415,14 @@ def get_railway_shapes(db: Session = Depends(get_db), detail: str = "high"):
                     ORDER BY trip_id, time DESC
                 ) rp
                 JOIN rail_trips rt ON rt.trip_id = rp.trip_id
+                    AND rt.trip_id ~ :fr_stops_pattern
                 JOIN rail_shapes rs ON rs.shape_id = rt.shape_id
             ) f
             WHERE (f.shape_pt_sequence = f.min_seq
                OR f.shape_pt_sequence = f.max_seq
                OR MOD(f.shape_pt_sequence, :keep_every) = 0)
-              AND f.shape_pt_lat BETWEEN 41.0 AND 51.5
-              AND f.shape_pt_lon BETWEEN -5.5 AND 10.0
             ORDER BY f.trip_id, f.shape_pt_sequence
-        """), {"cutoff": cutoff, "keep_every": keep_every}).fetchall()
+        """), {"cutoff": cutoff, "keep_every": keep_every, "fr_stops_pattern": "::87[0-9]+:87[0-9]+:"}).fetchall()
 
         shapes: dict[str, list[list[float]]] = {}
         for r in rows:

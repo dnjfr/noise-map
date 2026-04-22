@@ -1,5 +1,6 @@
 import React from 'react'
 import type { MapStyleKey } from './Map'
+import { MAP_STYLES } from './Map'
 import mapDark from '../assets/icons/map_dark.png'
 import mapGrey from '../assets/icons/map_grey.png'
 import mapLight from '../assets/icons/map_light.png'
@@ -9,9 +10,8 @@ interface Props {
   onStyleChange: (style: MapStyleKey) => void
 }
 
-/** Sélecteur de style de fond de carte (dark / grey / light).
- *  Chaque bouton affiche une miniature PNG du style correspondant. */
-const STYLES: { key: MapStyleKey; label: string; icon: string; border: string; activeBorder: string }[] = [
+/** Sélecteur de style de fond de carte — n'affiche que les styles configurés dans l'env. */
+const ALL_STYLES: { key: MapStyleKey; label: string; icon: string; border: string; activeBorder: string }[] = [
   {
     key: 'dark',
     label: 'Sombre',
@@ -20,8 +20,8 @@ const STYLES: { key: MapStyleKey; label: string; icon: string; border: string; a
     activeBorder: 'border-blue-400',
   },
   {
-    key: 'grey',
-    label: 'Gris',
+    key: 'default',
+    label: 'Standard',
     icon: mapGrey,
     border: 'border-slate-400',
     activeBorder: 'border-blue-400',
@@ -34,6 +34,8 @@ const STYLES: { key: MapStyleKey; label: string; icon: string; border: string; a
     activeBorder: 'border-blue-400',
   },
 ]
+
+const STYLES = ALL_STYLES.filter(s => s.key in MAP_STYLES)
 
 export default React.memo(function MapStyleToggle({ currentStyle, onStyleChange }: Props) {
   return (
