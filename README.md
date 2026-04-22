@@ -14,11 +14,9 @@ https://www.cartedubruit.com
 
 ## 📐 Architecture
 
-```
-ADS-B One API ──┐
-TomTom API    ──┼──→ Producers (Python) ─→ Kafka ─→ Processors (Python) ─→ TimescaleDB ─→ API (FastAPI) ─→ Frontend (Vite) 
-GTFS-RT SNCF  ──┘
-```
+<p align="center">
+<img width="1000" src="/git-img/architecture/architecture.png"/>
+</p>
 
 Trois flux parallèles :
 - **Aérien** (`aircraft-producer` / `aircraft-processor`) : positions ADS-B via adsb.one, calcul bruit en grille 0.1°
@@ -63,7 +61,7 @@ Le frontend utilise [MapTiler](https://www.maptiler.com/) pour afficher le fond 
 
 
 **4a.** Une fois la carte choisie, cliquez sur `USE THIS MAP`, la carte est prête à être utilisée, passez à l'étape **8.**
-<img width="1000" src="/git-img/maptiler/04-winter-light.png"/>
+<img width="1000" src="/git-img/maptiler/04-map-winter-light.png"/>
 
 
 **4b.** Vous souhaitez peut être customiser la carte que vous souhaitez utiliser, par exemple ici, on veut utiliser la version sombre de la carte et changer les couleurs de fond, cliquez sur `CUSTOMIZE`
@@ -79,7 +77,7 @@ Le frontend utilise [MapTiler](https://www.maptiler.com/) pour afficher le fond 
 
 
 **7.** A la différence d'une carte prête à l'emploi, vous devez également la rendre disponible dans votre application, cliquez sur `Publish`
-<img width="1000" src="/git-img/maptiler/08-url.png"/>
+<img width="1000" src="/git-img/maptiler/08-publish.png"/>
 
 
 **8.** Votre carte est prête à être utilisée
@@ -94,6 +92,8 @@ Vous avez plusieurs possibilités :
 - Utiliser une carte par défaut (claire ou sombre)
 - Utiliser deux cartes (par exemple une carte sombre par défaut qui sera renseignée dans la variable `VITE_MAPTILER_DEFAULT_MAP` et une carte claire qu'il faudra renseigner dans la variable `VITE_MAPTILER_LIGHT_MAP`)
 - Utiliser trois cartes (une grise qui sera la carte par défaut, une carte claire et une carte sombre)
+
+Si vous n'utilisez qu'une ou deux cartes, vous pouvez supprimer ou laisser à vide la ou les variables non utilisées.
 
 ```dotenv
 # Obligatoire - seule carte nécessaire pour que le frontend s'affiche
