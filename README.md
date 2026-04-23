@@ -267,7 +267,7 @@ make logs-api
 
 | Table | Description |
 |---|---|
-| `rail_trips` | Voyages du jour (GTFS SNCF) |
+| `rail_trips` | Trajets du jour (GTFS SNCF) |
 | `rail_stop_times` | Horaires aux arrêts |
 
 ## 📊 Endpoints API
@@ -312,6 +312,21 @@ POLL_INTERVAL = 300
 Par défaut, les données sont récupérées sur TomTom toutes les 30 secondes sachant que les données sont mises à jour toutes les 2 minutes pour les trains circulant dans les 60 prochaines minutes. Pour modifier la fréquence, éditer `POLL_INTERVAL` dans le `railway-producer` :
 ```python
 POLL_INTERVAL = 30
+```
+
+### Logs de performance dans le navigateur
+
+Le frontend affiche dans la console du navigateur des métriques de chargement (temps réseau, taille des réponses, temps de parsing JSON). Ces logs sont utiles pour diagnostiquer des lenteurs ou des problèmes de fetch.
+
+Pour les activer ou les désactiver, modifier le flag `DEBUG_PERF` dans les deux fichiers suivants puis rebuilder le frontend (`make build-frontend`) :
+
+- `frontend/src/hooks/perfLog.ts` — logs des hooks de données (avions, trains, routes, stats)
+- `frontend/src/App.tsx` — logs d'ouverture et fermeture de page
+
+```ts
+// true  → logs visibles dans la console du navigateur
+// false → logs silencés (le code reste en place)
+const DEBUG_PERF = true
 ```
 
 ## 📦 Commandes Makefile
@@ -408,6 +423,7 @@ make assign-shapes
 
 - [ ] Intégrer des capteurs de bruit réels (IoT, Bruitparif)
 - [ ] Intégrer la météo
+- [ ] Intégrer des données comme les revêtements pour les routes et les types de voies pour les lignes ferroviaires
 - [ ] Prédiction des niveaux de bruit (ML)
 - [ ] Historique long terme et analyses statistiques
 - [ ] Alertes sur zones dépassant un seuil configurable
@@ -421,7 +437,7 @@ make assign-shapes
 
 - **ADS-B One** : agrégateur communautaire de récepteurs ADS-B, sans limite de requêtes connue, mais la couverture dépend de la densité des récepteurs bénévoles - zones rurales ou en altitude potentiellement sous-représentées.
 - **TomTom** : couverture limitée aux tronçons autoroutiers et voies rapides (`motorway` / `trunk`). Les routes secondaires, départementales et urbaines ne sont pas incluses.
-- **GTFS-RT SNCF** : données officielles SNCF, mises à jour quotidiennement à 18h. Les perturbations de dernière minute (suppression de train, changement de voie) peuvent ne pas être reflétées immédiatement.
+- **GTFS-RT SNCF de transport.data.gouv.fr** : données officielles SNCF, mises à jour quotidiennement à 18h. Les perturbations de dernière minute (suppression de train, changement de voie) peuvent ne pas être reflétées immédiatement.
 
 ### Modèles de bruit - ce qu'ils font et leurs limites
 

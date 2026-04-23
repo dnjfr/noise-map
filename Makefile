@@ -294,7 +294,6 @@ db-backup:
 		-t icao_type_mapping \
 		-t madb_noise_ref \
 		-t icao_noise_pattern \
-		-t rail_route_shapes \
 		| gzip > $(BACKUP_DIR)/noise_map_$$(date +%Y%m%d).sql.gz
 	@echo "Backup sauvegardé: $(BACKUP_DIR)/noise_map_$$(date +%Y%m%d).sql.gz"
 

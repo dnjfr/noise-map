@@ -80,7 +80,9 @@ echo "      Restauration terminée."
 echo ""
 echo "[4/6] Décompression de shapes.tar.xz..."
 mkdir -p "$GTFS_DIR"
+cat "$SCRIPT_DIR"/shapes-import/shapes.tar.xz.part-* > "$SHAPES_ARCHIVE"
 tar -xJf "$SHAPES_ARCHIVE" -C "$SCRIPT_DIR"
+rm "$SHAPES_ARCHIVE"
 echo "      shapes.txt extrait dans $GTFS_DIR"
 
 # ── 5. Import shapes (si rail_shapes est vide) ────────────────────────────────
@@ -97,31 +99,31 @@ else
   echo "      rail_shapes importée."
 fi
 
-# ── 6. Calcul du mapping shape (si rail_route_shapes est vide) ────────────────
+# ── 6. GTFS SNCF ──────────────────────────────────────────────────────────────
 echo ""
-echo "[6/7] Vérification du mapping shapes → trips..."
+echo "[6/7] Téléchargement du GTFS SNCF..."
+curl -fsSL -o "$GTFS_ZIP" "$GTFS_URL"
+echo "      Extraction vers $GTFS_DIR..."
+unzip -o "$GTFS_ZIP" -d "$GTFS_DIR" > /dev/null
+rm -f "$GTFS_ZIP"
+echo "      Import stops + routes + trips + stop_times..."
+docker compose run --rm \
+  -v "$SCRIPT_DIR/gtfs-statique:/app/gtfs-statique:ro" \
+  gtfs-updater python3 import-gtfs.py
+echo "      GTFS importé."
+
+# ── 7. Calcul du mapping shape (si rail_route_shapes est vide) ────────────────
+echo ""
+echo "[7/7] Vérification du mapping shapes → trips..."
 MAPPING_COUNT=$(docker exec "$TIMESCALE_HOST" psql -U "$TIMESCALE_USER" -d "$TIMESCALE_NAME" -tAc \
   "SELECT COUNT(*) FROM rail_route_shapes" 2>/dev/null || echo "0")
 if [[ "$MAPPING_COUNT" -gt 0 ]]; then
-  echo "      rail_route_shapes déjà remplie ($MAPPING_COUNT entrées) — restaurée depuis backup."
+  echo "      rail_route_shapes déjà remplie ($MAPPING_COUNT entrées) — skip."
 else
   echo "      rail_route_shapes vide — calcul du mapping géométrique (1-2 min)..."
   docker compose run --rm gtfs-updater python3 assign-shapes.py
   echo "      Mapping calculé."
 fi
-
-# ── 7. GTFS SNCF ──────────────────────────────────────────────────────────────
-echo ""
-echo "[7/7] Téléchargement du GTFS SNCF..."
-curl -fsSL -o "$GTFS_ZIP" "$GTFS_URL"
-echo "      Extraction vers $GTFS_DIR..."
-unzip -o "$GTFS_ZIP" -d "$GTFS_DIR" > /dev/null
-rm -f "$GTFS_ZIP"
-echo "      Import stops + routes + trips + stop_times + application mapping shapes..."
-docker compose run --rm \
-  -v "$SCRIPT_DIR/gtfs-statique:/app/gtfs-statique:ro" \
-  gtfs-updater python3 import-gtfs.py
-echo "      GTFS importé."
 
 echo ""
 echo "════════════════════════════════════════"

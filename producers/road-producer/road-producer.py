@@ -157,22 +157,11 @@ def create_db_engine():
             with engine.connect() as conn:
                 conn.execute(text("SELECT 1"))
             logger.info("Connexion DB réussie")
-            _run_migrations(engine)
             return engine
         except Exception as e:
             logger.warning(f"Tentative {attempt+1}/10 - Erreur DB: {e}")
             time.sleep(5)
     raise Exception("Impossible de se connecter à la DB")
-
-
-def _run_migrations(engine):
-    """Applique les migrations schema manquantes sur une DB existante."""
-    with engine.begin() as conn:
-        conn.execute(text("ALTER TABLE road_segments_ref ADD COLUMN IF NOT EXISTS fetched_at TIMESTAMPTZ DEFAULT NOW()"))
-        conn.execute(text("ALTER TABLE road_segments_ref ADD COLUMN IF NOT EXISTS average_speed DOUBLE PRECISION"))
-        conn.execute(text("ALTER TABLE road_segments_ref ADD COLUMN IF NOT EXISTS free_flow_speed DOUBLE PRECISION"))
-        conn.execute(text("ALTER TABLE road_segments_ref ADD COLUMN IF NOT EXISTS traffic_flow INTEGER"))
-    logger.info("[Migration] fetched_at + average_speed + free_flow_speed + traffic_flow OK")
 
 
 # ─── Utilitaires tuiles XYZ ──────────────────────────────────────────────────

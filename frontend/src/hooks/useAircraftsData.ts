@@ -18,42 +18,22 @@ export interface Aircraft {
   aircraft_category: string | null
 }
 
-export interface Stats {
-  aircraft_count: number
-  avg_noise_db: number
-  max_noise_db: number
-  railway_train_count: number
-  railway_avg_noise_db: number
-  railway_max_noise_db: number
-  road_segment_count: number
-  road_avg_noise_db: number
-  road_max_noise_db: number
-}
-
-interface AircraftsData {
+interface AircraftsState {
   aircraftsData: Aircraft[]
-  stats: Stats | null
-}
-
-interface AircraftsState extends AircraftsData {
   lastUpdate: Date | null
 }
 
 /**
- * Hook React exposant les positions des avions et les statistiques globales.
- * Poll /api/aircrafts/positions et /api/stats toutes les 3 secondes.
- * Évite les re-renders inutiles en comparant les comptages avant de mettre à jour l'état.
+ * Hook React exposant les positions des avions.
+ * Poll /api/aircrafts/positions toutes les 3 secondes.
  *
- * @returns { aircraftsData, stats, lastUpdate }
+ * @returns { aircraftsData, lastUpdate }
  */
 export function useAircraftsData(): AircraftsState {
-  const [data, setData] = useState<AircraftsData>({
-    aircraftsData: [],
-    stats: null,
-  })
+  const [aircraftsData, setAircraftsData] = useState<Aircraft[]>([])
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null)
 
-  const prevRef = useRef<AircraftsData | null>(null)
+  const prevCountRef = useRef<number>(-1)
 
   const fetchCountRef = useRef(0)
   const fetchData = useCallback(async () => {
@@ -61,37 +41,17 @@ export function useAircraftsData(): AircraftsState {
     fetchCountRef.current++
     const t0 = performance.now()
     try {
-      const [aircraftRes, statsRes] = await Promise.all([
-        isFirst ? perfFetch('aircraft', `http://${API_URL}:8000/api/aircrafts/positions`) : fetch(`http://${API_URL}:8000/api/aircrafts/positions`),
-        isFirst ? perfFetch('stats', `http://${API_URL}:8000/api/stats`) : fetch(`http://${API_URL}:8000/api/stats`),
-      ])
-      const aircraftResult = isFirst ? await perfJson<any>('aircraft', aircraftRes) : await aircraftRes.json()
-      const statsResult = isFirst ? await perfJson<any>('stats', statsRes) : await statsRes.json()
-      if (isFirst) {
-        perfDone('aircraft', aircraftResult.data?.length ?? 0, t0)
-        perfDone('stats', '1', t0)
+      const res = isFirst
+        ? await perfFetch('aircraft', `http://${API_URL}:8000/api/aircrafts/positions`)
+        : await fetch(`http://${API_URL}:8000/api/aircrafts/positions`)
+      const result = isFirst ? await perfJson<any>('aircraft', res) : await res.json()
+      if (isFirst) perfDone('aircraft', result.data?.length ?? 0, t0)
+
+      const newCount = result.data?.length ?? 0
+      if (newCount !== prevCountRef.current) {
+        prevCountRef.current = newCount
+        setAircraftsData(result.data || [])
       }
-
-      const newAircraftCount = aircraftResult.data?.length ?? 0
-      const prevAircraftCount = prevRef.current?.aircraftsData.length ?? -1
-
-      const prevStats = prevRef.current?.stats
-      const statsUnchanged = prevStats != null &&
-        statsResult.aircraft_count === prevStats.aircraft_count &&
-        statsResult.avg_noise_db === prevStats.avg_noise_db &&
-        statsResult.max_noise_db === prevStats.max_noise_db
-
-      if (newAircraftCount === prevAircraftCount && statsUnchanged) {
-        setLastUpdate(new Date())
-        return
-      }
-
-      const newData: AircraftsData = {
-        aircraftsData: aircraftResult.data || [],
-        stats: statsResult,
-      }
-      prevRef.current = newData
-      setData(newData)
       setLastUpdate(new Date())
     } catch (error) {
       console.error('Erreur lors du chargement des données avions:', error)
@@ -104,5 +64,5 @@ export function useAircraftsData(): AircraftsState {
     return () => clearInterval(interval)
   }, [fetchData])
 
-  return useMemo(() => ({ ...data, lastUpdate }), [data, lastUpdate])
+  return useMemo(() => ({ aircraftsData, lastUpdate }), [aircraftsData, lastUpdate])
 }

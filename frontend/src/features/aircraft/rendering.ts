@@ -60,7 +60,7 @@ export function drawHalos(
     const innerRadiusMeters = calcNoiseRadius(noiseReferenceDb, DB_LEVEL_COLOR_STOPS[DB_LEVEL_COLOR_STOPS.length - 1][0], altitudeMeters) ?? 0
     const innerRadiusPixels = Math.max(0, innerRadiusMeters / metersPerPixel)
 
-    if (outerRadiusPixels < 2) continue
+    if (!isFinite(outerRadiusPixels) || outerRadiusPixels < 2 || !isFinite(innerRadiusPixels)) continue
 
     const radialGradient = canvasContext.createRadialGradient(pointX, pointY, innerRadiusPixels, pointX, pointY, outerRadiusPixels)
 

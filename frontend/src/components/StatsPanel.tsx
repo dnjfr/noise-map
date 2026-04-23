@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import type { Stats } from '../hooks/useAircraftsData'
+import type { Stats } from '../hooks/useStats'
 
 interface Props {
   stats: Stats | null

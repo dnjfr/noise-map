@@ -64,7 +64,7 @@ export function drawRailwayHalos(
     const innerRadiusM = calcRailwayNoiseRadius(lRef, vRef, speedKmh, DB_LEVEL_COLOR_STOPS[DB_LEVEL_COLOR_STOPS.length - 1][0])
     const innerRadiusPx = Math.max(0, innerRadiusM / metersPerPixel)
 
-    if (outerRadiusPx < 2) continue
+    if (!isFinite(outerRadiusPx) || outerRadiusPx < 2 || !isFinite(innerRadiusPx)) continue
 
     const grad = ctx.createRadialGradient(px, py, innerRadiusPx, px, py, outerRadiusPx)
 

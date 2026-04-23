@@ -1,6 +1,10 @@
 -- Créer l'extension TimescaleDB
 CREATE EXTENSION IF NOT EXISTS timescaledb;
 
+
+
+-- ─── Pipeline aérien ────────────────────────────────────
+
 -- Table pour stocker les positions des avions
 CREATE TABLE IF NOT EXISTS aircraft_positions (
     time TIMESTAMPTZ NOT NULL,
@@ -20,6 +24,18 @@ CREATE TABLE IF NOT EXISTS aircraft_positions (
 
 -- Convertir en hypertable pour optimisation temporelle
 SELECT create_hypertable('aircraft_positions', 'time', if_not_exists => TRUE);
+
+SELECT set_chunk_time_interval('aircraft_positions', INTERVAL '1 hour');
+
+ALTER TABLE aircraft_positions 
+SET (
+    timescaledb.enable_columnstore = true,
+    timescaledb.segmentby = 'icao24'
+);
+
+CALL add_columnstore_policy('aircraft_positions', INTERVAL '12 hours');
+
+SELECT add_retention_policy('aircraft_positions', INTERVAL '1 day', if_not_exists => TRUE);
 
 -- Table pour stocker les niveaux de bruit calculés par zone
 CREATE TABLE IF NOT EXISTS aircraft_noise_levels (
@@ -44,14 +60,22 @@ CREATE INDEX IF NOT EXISTS idx_aircraft_noise_levels_coords
 CREATE INDEX IF NOT EXISTS idx_aircraft_noise_levels_grid
     ON aircraft_noise_levels (grid_id, time DESC);
 
--- Politique de rétention : garder 7 jours de données
-SELECT add_retention_policy('aircraft_positions', INTERVAL '7 days', if_not_exists => TRUE);
-SELECT add_retention_policy('aircraft_noise_levels', INTERVAL '7 days', if_not_exists => TRUE);
+SELECT set_chunk_time_interval('aircraft_noise_levels', INTERVAL '3 hours');
+
+ALTER TABLE aircraft_noise_levels SET (timescaledb.enable_columnstore = true);
+
+CALL add_columnstore_policy('aircraft_noise_levels', INTERVAL '12 hours');
+
+-- Politique de rétention : garder 3 jours de données
+SELECT add_retention_policy('aircraft_noise_levels', INTERVAL '3 days', if_not_exists => TRUE);
+
+
+-- ─── Pipeline routier (TomTom) ────────────────────────────────────
 
 -- Référentiel statique des segments routiers (rempli au démarrage du road-producer)
 CREATE TABLE IF NOT EXISTS road_segments_ref (
     code_pme       TEXT PRIMARY KEY,
-    axe            VARCHAR(20),
+    axe            TEXT,
     source         VARCHAR(10),
     lat_deb        DOUBLE PRECISION,
     lon_deb        DOUBLE PRECISION,
@@ -72,18 +96,6 @@ CREATE TABLE IF NOT EXISTS road_segments_ref (
     fetched_at     TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Migration pour les DB existantes
-ALTER TABLE road_segments_ref ADD COLUMN IF NOT EXISTS maxspeed INTEGER;
-ALTER TABLE road_segments_ref ADD COLUMN IF NOT EXISTS surface VARCHAR(30);
-ALTER TABLE road_segments_ref ADD COLUMN IF NOT EXISTS bridge BOOLEAN DEFAULT FALSE;
-ALTER TABLE road_segments_ref ADD COLUMN IF NOT EXISTS tunnel BOOLEAN DEFAULT FALSE;
-ALTER TABLE road_segments_ref ADD COLUMN IF NOT EXISTS highway_type VARCHAR(50);
-ALTER TABLE road_segments_ref ALTER COLUMN highway_type TYPE VARCHAR(50);
-ALTER TABLE road_segments_ref ALTER COLUMN axe TYPE TEXT;
-ALTER TABLE road_segments_ref ADD COLUMN IF NOT EXISTS fetched_at TIMESTAMPTZ DEFAULT NOW();
-ALTER TABLE road_segments_ref ADD COLUMN IF NOT EXISTS average_speed DOUBLE PRECISION;
-ALTER TABLE road_segments_ref ADD COLUMN IF NOT EXISTS free_flow_speed DOUBLE PRECISION;
-ALTER TABLE road_segments_ref ADD COLUMN IF NOT EXISTS traffic_flow INTEGER;
 
 -- Niveaux de bruit routier par segment (hypertable TimescaleDB)
 CREATE TABLE IF NOT EXISTS road_noise_levels (
@@ -94,8 +106,21 @@ CREATE TABLE IF NOT EXISTS road_noise_levels (
     average_speed DOUBLE PRECISION
 );
 SELECT create_hypertable('road_noise_levels', 'time', if_not_exists => TRUE);
+
 CREATE INDEX IF NOT EXISTS idx_road_noise_code_pme ON road_noise_levels (code_pme, time DESC);
-SELECT add_retention_policy('road_noise_levels', INTERVAL '7 days', if_not_exists => TRUE);
+
+SELECT set_chunk_time_interval('road_noise_levels', INTERVAL '3 hours');
+
+ALTER TABLE road_noise_levels 
+SET (
+    timescaledb.enable_columnstore = true,
+    timescaledb.segmentby = 'code_pme'
+);
+
+CALL add_columnstore_policy('road_noise_levels', INTERVAL '12 hours');
+
+SELECT add_retention_policy('road_noise_levels', INTERVAL '3 days', if_not_exists => TRUE);
+
 
 -- ─── Pipeline ferroviaire (trains SNCF) ────────────────────────────────────
 
@@ -114,10 +139,21 @@ CREATE TABLE IF NOT EXISTS railway_positions (
     prev_stop_name TEXT
 );
 SELECT create_hypertable('railway_positions', 'time', if_not_exists => TRUE);
+
 CREATE INDEX IF NOT EXISTS idx_railway_positions_coords
     ON railway_positions (latitude, longitude, time DESC);
-SELECT add_retention_policy('railway_positions', INTERVAL '7 days', if_not_exists => TRUE);
-ALTER TABLE railway_positions ADD COLUMN IF NOT EXISTS prev_stop_name TEXT;
+
+SELECT set_chunk_time_interval('railway_positions', INTERVAL '1 hour');
+
+ALTER TABLE railway_positions 
+SET (
+    timescaledb.enable_columnstore = true,
+    timescaledb.segmentby = 'trip_id'
+);
+
+CALL add_columnstore_policy('railway_positions', INTERVAL '12 hours');
+
+SELECT add_retention_policy('railway_positions', INTERVAL '1 day', if_not_exists => TRUE);
 
 -- Niveaux de bruit ferroviaire (hypertable, pattern noise_levels)
 CREATE TABLE IF NOT EXISTS railway_noise_levels (
@@ -128,12 +164,22 @@ CREATE TABLE IF NOT EXISTS railway_noise_levels (
     train_count INTEGER,
     grid_id TEXT
 );
+
 SELECT create_hypertable('railway_noise_levels', 'time', if_not_exists => TRUE);
+
 CREATE INDEX IF NOT EXISTS idx_railway_noise_coords
     ON railway_noise_levels (latitude, longitude, time DESC);
 CREATE INDEX IF NOT EXISTS idx_railway_noise_grid
     ON railway_noise_levels (grid_id, time DESC);
-SELECT add_retention_policy('railway_noise_levels', INTERVAL '7 days', if_not_exists => TRUE);
+
+SELECT set_chunk_time_interval('railway_noise_levels', INTERVAL '3 hours');
+
+ALTER TABLE railway_noise_levels SET (timescaledb.enable_columnstore = true);
+
+CALL add_columnstore_policy('railway_noise_levels', INTERVAL '12 hours');
+
+SELECT add_retention_policy('railway_noise_levels', INTERVAL '3 days', if_not_exists => TRUE);
+
 
 -- ─── Tables GTFS SNCF ────────────────────────────────────────────────────────
 -- Statiques (backup) : rail_stops, rail_routes, rail_route_shapes
@@ -147,6 +193,7 @@ CREATE TABLE IF NOT EXISTS rail_stops (
     parent_station   TEXT,
     location_type    SMALLINT DEFAULT 0
 );
+
 CREATE INDEX IF NOT EXISTS idx_rail_stops_name ON rail_stops (stop_name);
 
 CREATE TABLE IF NOT EXISTS rail_routes (
@@ -168,6 +215,7 @@ CREATE TABLE IF NOT EXISTS rail_trips (
     trip_headsign    TEXT,
     direction_id     SMALLINT
 );
+
 CREATE INDEX IF NOT EXISTS idx_rail_trips_route ON rail_trips (route_id);
 CREATE INDEX IF NOT EXISTS idx_rail_trips_shape ON rail_trips (shape_id);
 
@@ -182,6 +230,7 @@ CREATE TABLE IF NOT EXISTS rail_route_shapes (
     match_score  DOUBLE PRECISION,
     PRIMARY KEY (route_id, first_stop, last_stop)
 );
+
 CREATE INDEX IF NOT EXISTS idx_rail_route_shapes_route ON rail_route_shapes (route_id);
 
 CREATE TABLE IF NOT EXISTS rail_shapes (
@@ -192,6 +241,7 @@ CREATE TABLE IF NOT EXISTS rail_shapes (
     shape_dist_traveled  DOUBLE PRECISION,
     PRIMARY KEY (shape_id, shape_pt_sequence)
 );
+
 CREATE INDEX IF NOT EXISTS idx_rail_shapes_id ON rail_shapes (shape_id);
 
 -- Tables temporelles — TRUNCATE + reload à chaque changement de service SNCF
@@ -204,6 +254,7 @@ CREATE TABLE IF NOT EXISTS rail_stop_times (
     shape_dist_traveled  DOUBLE PRECISION,
     PRIMARY KEY (trip_id, stop_sequence)
 );
+
 CREATE INDEX IF NOT EXISTS idx_rail_stop_times_trip ON rail_stop_times (trip_id);
 CREATE INDEX IF NOT EXISTS idx_rail_stop_times_stop ON rail_stop_times (stop_id);
 
@@ -213,5 +264,6 @@ CREATE TABLE IF NOT EXISTS rail_calendar (
     exception_type  SMALLINT NOT NULL,  -- 1=ajouté, 2=supprimé
     PRIMARY KEY (service_id, date)
 );
+
 CREATE INDEX IF NOT EXISTS idx_rail_calendar_date ON rail_calendar (date);
 

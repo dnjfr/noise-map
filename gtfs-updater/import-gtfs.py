@@ -97,20 +97,24 @@ def import_routes(conn, gtfs_dir: str) -> int:
 
 
 def import_shapes(conn, gtfs_dir: str) -> int:
+    """Import en streaming ligne par ligne pour éviter de charger tout le fichier en mémoire."""
     path = os.path.join(gtfs_dir, "shapes.txt")
-    rows = []
+    count = 0
     with open(path, newline="", encoding="utf-8") as f:
-        for row in tqdm(csv.DictReader(f), desc="    shapes", unit=" pts"):
-            rows.append([
-                row["shape_id"],
-                float(row["shape_pt_lat"]),
-                float(row["shape_pt_lon"]),
-                int(row["shape_pt_sequence"]),
-                float(row["shape_dist_traveled"]) if row.get("shape_dist_traveled") else None,
-            ])
-    return copy_csv(conn, "rail_shapes",
-                    ["shape_id", "shape_pt_lat", "shape_pt_lon", "shape_pt_sequence", "shape_dist_traveled"],
-                    rows)
+        with conn.cursor() as cur:
+            with cur.copy(
+                "COPY rail_shapes (shape_id, shape_pt_lat, shape_pt_lon, shape_pt_sequence, shape_dist_traveled) FROM STDIN"
+            ) as copy:
+                for row in tqdm(csv.DictReader(f), desc="    shapes", unit=" pts"):
+                    copy.write_row((
+                        row["shape_id"],
+                        float(row["shape_pt_lat"]),
+                        float(row["shape_pt_lon"]),
+                        int(row["shape_pt_sequence"]),
+                        float(row["shape_dist_traveled"]) if row.get("shape_dist_traveled") else None,
+                    ))
+                    count += 1
+    return count
 
 
 def import_trips(conn, gtfs_dir: str) -> int:

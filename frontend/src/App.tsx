@@ -11,12 +11,16 @@ import { useAircraftsData } from './hooks/useAircraftsData'
 import { useRailwaysData } from './hooks/useRailwaysData'
 import { useRoadsData } from './hooks/useRoadsData'
 import { useRailwaysShapes } from './hooks/useRailwaysShapes'
+import { useStats } from './hooks/useStats'
+
+const DEBUG_PERF = true
 
 const PAGE_OPEN = performance.now()
-console.log(`%c[PERF] ══════ PAGE OUVERTE ══════`, 'color: #22d3ee; font-weight: bold; font-size: 14px')
+if (DEBUG_PERF) console.log(`%c[PERF] ══════ PAGE OUVERTE ══════`, 'color: #22d3ee; font-weight: bold; font-size: 14px')
 
 export default function App() {
-  const { stats, aircraftsData, lastUpdate } = useAircraftsData()
+  const { aircraftsData, lastUpdate } = useAircraftsData()
+  const stats = useStats()
   const { roadsData } = useRoadsData()
   const { railwaysData } = useRailwaysData()
   const { shapesData, refreshShapes } = useRailwaysShapes()
@@ -44,7 +48,7 @@ export default function App() {
   // Log fermeture page
   useEffect(() => {
     const onUnload = () => {
-      console.log(`%c[PERF] ══════ PAGE FERMÉE (durée: ${((performance.now() - PAGE_OPEN) / 1000).toFixed(1)}s) ══════`, 'color: #f87171; font-weight: bold; font-size: 14px')
+      if (DEBUG_PERF) console.log(`%c[PERF] ══════ PAGE FERMÉE (durée: ${((performance.now() - PAGE_OPEN) / 1000).toFixed(1)}s) ══════`, 'color: #f87171; font-weight: bold; font-size: 14px')
     }
     window.addEventListener('beforeunload', onUnload)
     return () => window.removeEventListener('beforeunload', onUnload)
