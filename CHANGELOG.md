@@ -1,12 +1,19 @@
 
 # Changelog
 
+## [v1.1.17] - 2026-04-24
+- Enrichissement de certains shapes manquants à partir du fichier RFN
+- Modification de l'emplacement du dossier provisoire gtfs-statique
+- Modification de l'affichage des stats
+- Réorganisation du Makefile
+- Mise à jour du README.md
+
 ## [v1.1.16] - 2026-04-23
 - Correction d'une dette technique sur les stats 
 - Amélioration de la gestion des hypertables 
 - Simplification du code SQL 
 - Mise à jour de l'architecture du projet 
-- Régénération des shapes
+- Régénération des shapes avec pfaedle
 - Optimisation mémoire sur l'assignation des shapes et sur l'API
 - Mise à jour du README.md
 

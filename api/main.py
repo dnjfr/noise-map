@@ -460,7 +460,7 @@ def get_stats(db: Session = Depends(get_db)):
     Returns:
         dict: Dictionnaire avec les champs suivants :
             - aircraft_count (int) : avions en vol
-            - avg_noise_db / max_noise_db (float) : bruit aérien agrégé
+            - aircraft_avg_noise_db / aircraft_max_noise_db (float) : bruit aérien agrégé
             - railway_train_count (int) : trains actifs
             - railway_avg_noise_db / railway_max_noise_db (float) : bruit ferroviaire agrégé
             - road_segment_count (int) : segments routiers avec données récentes
@@ -470,6 +470,7 @@ def get_stats(db: Session = Depends(get_db)):
     """
     try:
         two_minutes_ago = datetime.utcnow() - timedelta(minutes=2)
+        six_minutes_ago = datetime.utcnow() - timedelta(minutes=6)
         ten_minutes_ago = datetime.utcnow() - timedelta(minutes=10)
         
         # Nombre total d'avions dans les 2 dernières minutes
@@ -499,15 +500,16 @@ def get_stats(db: Session = Depends(get_db)):
         ).scalar()
 
         # Bruit moyen, max et nombre de segments routiers actifs
+        # Fenêtre 6 min > POLL_INTERVAL=5 min du road-producer pour éviter les trous entre cycles
         road_noise_stats = db.query(
             func.avg(RoadNoiseLevel.noise_db).label("avg_noise"),
             func.max(RoadNoiseLevel.noise_db).label("max_noise"),
             func.count(func.distinct(RoadNoiseLevel.code_pme)).label("segment_count")
         ).filter(
-            RoadNoiseLevel.time > two_minutes_ago
+            RoadNoiseLevel.time > six_minutes_ago
         ).first()
 
-        # Zones les plus bruyantes (aérien)
+        # Zones les plus bruyantes (aérien) - non utilisé, pourrait servir plus tard pour faire une heatmap par exemple
         noisiest_zones = db.query(
             AircraftNoiseLevel.grid_id,
             AircraftNoiseLevel.latitude,
@@ -535,8 +537,8 @@ def get_stats(db: Session = Depends(get_db)):
         
         return {
             "aircraft_count": aircraft_count or 0,
-            "avg_noise_db": float(noise_stats.avg_noise) if noise_stats.avg_noise else 0.0,
-            "max_noise_db": float(noise_stats.max_noise) if noise_stats.max_noise else 0.0,
+            "aircraft_avg_noise_db": float(noise_stats.avg_noise) if noise_stats.avg_noise else 0.0,
+            "aircraft_max_noise_db": float(noise_stats.max_noise) if noise_stats.max_noise else 0.0,
             "railway_train_count": railway_train_count or 0,
             "railway_avg_noise_db": float(railway_noise_stats.avg_noise) if railway_noise_stats and railway_noise_stats.avg_noise else 0.0,
             "railway_max_noise_db": float(railway_noise_stats.max_noise) if railway_noise_stats and railway_noise_stats.max_noise else 0.0,

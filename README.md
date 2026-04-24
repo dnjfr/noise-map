@@ -4,7 +4,7 @@ Visualisation en quasi temps réel des niveaux de bruit aérien, routier et ferr
 
 ## 📋 Idée d'origine
 
-Le bruit est un fléau qui génère stress et fatigue. Mais est-ce qu'on se rend vraiment compte du bruit qui nous entoure ?
+Le bruit est un fléau qui génère stress et fatigue. Mais se rend t'on vraiment compte du bruit qui nous entoure ?
 
 Les cartes de bruit existantes reposent sur des modèles de propagation acoustique (NMPB, CNOSSOS-EU), alimentés par des données très précises (trafic, géométrie, topographie). Ce sont des snapshots statiques, basés sur des comptages périodiques. À ma connaissance, il n'existe pas de carte en temps réel - c'est de là qu'est né ce projet.
 
@@ -427,6 +427,7 @@ make assign-shapes
 - [ ] Prédiction des niveaux de bruit (ML)
 - [ ] Historique long terme et analyses statistiques
 - [ ] Alertes sur zones dépassant un seuil configurable
+- [ ] Créer une heatmap des zones les plus bruyantes
 - [ ] Support multi-pays
 - [ ] Mode nuit/jour avec variation du bruit
 - [ ] Export des données (CSV, GeoJSON)

@@ -69,6 +69,7 @@ services:
   pgadmin:
     container_name: pgadmin
     image: dpage/pgadmin4
+    profiles: ["admin"]
     environment:
       PGADMIN_DEFAULT_EMAIL: $PGADMIN_DEFAULT_EMAIL
       PGADMIN_DEFAULT_PASSWORD: $PGADMIN_DEFAULT_PASSWORD
@@ -216,6 +217,26 @@ services:
     mem_limit: 1g
     memswap_limit: 1g
     restart: unless-stopped
+
+  # Applique le fix sur les shapes absents de rail_shapes (one-shot, lancé via db-init.sh)
+  fix-shape-rfn:
+    build:
+      context: ./database-init/fix-shape-rfn
+      dockerfile: Dockerfile
+    container_name: fix-shape-rfn
+    depends_on:
+      timescaledb:
+        condition: service_started
+    environment:
+      TIMESCALE_HOST: $TIMESCALE_HOST
+      TIMESCALE_PORT: $TIMESCALE_PORT
+      TIMESCALE_NAME: $TIMESCALE_NAME
+      TIMESCALE_USER: $TIMESCALE_USER
+      TIMESCALE_PASSWORD: $TIMESCALE_PASSWORD
+    volumes:
+      - ./database-init/lignes-rfn:/app/lignes-rfn:ro
+    restart: no
+
 
 
   # API FastAPI pour exposer les données

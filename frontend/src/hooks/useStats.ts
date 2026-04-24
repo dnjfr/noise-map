@@ -5,8 +5,8 @@ const UPDATE_INTERVAL = 5000
 
 export interface Stats {
   aircraft_count: number
-  avg_noise_db: number
-  max_noise_db: number
+  aircraft_avg_noise_db: number
+  aircraft_max_noise_db: number
   railway_train_count: number
   railway_avg_noise_db: number
   railway_max_noise_db: number
@@ -26,8 +26,8 @@ export function useStats(): Stats | null {
         if (
           prev != null &&
           data.aircraft_count === prev.aircraft_count &&
-          data.avg_noise_db === prev.avg_noise_db &&
-          data.max_noise_db === prev.max_noise_db &&
+          data.aircraft_avg_noise_db === prev.aircraft_avg_noise_db &&
+          data.aircraft_max_noise_db === prev.aircraft_max_noise_db &&
           data.road_segment_count === prev.road_segment_count &&
           data.road_avg_noise_db === prev.road_avg_noise_db &&
           data.road_max_noise_db === prev.road_max_noise_db &&
