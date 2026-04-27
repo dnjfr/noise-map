@@ -1,6 +1,6 @@
 import os
 import threading
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import create_engine, Column, String, Float, Integer, Boolean, TIMESTAMP, JSON, text, desc, func
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
@@ -19,12 +19,18 @@ load_dotenv(override=True)
 
 app = FastAPI(title="Noise Map API", version="1.0.0")
 
+origins = [
+    origin.strip()
+    for origin in os.getenv("CORS_ORIGINS", "").split(",")
+    if origin.strip()
+]
+
 # CORS pour permettre les requêtes depuis le frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET"],
     allow_headers=["*"],
 )
 
@@ -563,7 +569,7 @@ def _simplify_geom(geom: list, max_pts: int = 20) -> list:
 @app.get("/api/noise/history")
 def get_noise_history(
     grid_id: str,
-    hours: Optional[int] = 1,
+    hours: int = Query(default=1, ge=1, le=24),
     db: Session = Depends(get_db)
 ):
     """Retourne la série temporelle du bruit pour une cellule de grille.

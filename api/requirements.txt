@@ -1,7 +1,7 @@
-fastapi
-uvicorn
-psycopg[binary]
-sqlalchemy
-python-dotenv
-cachetools
-orjson
+fastapi==0.136.1
+uvicorn==0.46.0
+psycopg-binary==3.3.3
+sqlalchemy==2.0.49
+python-dotenv==1.2.2
+cachetools==7.0.6
+orjson==3.11.8
