@@ -21,6 +21,7 @@ export interface Aircraft {
 interface AircraftsState {
   aircraftsData: Aircraft[]
   lastUpdate: Date | null
+  apiError: boolean
 }
 
 /**
@@ -32,8 +33,10 @@ interface AircraftsState {
 export function useAircraftsData(): AircraftsState {
   const [aircraftsData, setAircraftsData] = useState<Aircraft[]>([])
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null)
+  const [apiError, setApiError] = useState(false)
 
   const prevCountRef = useRef<number>(-1)
+  const consecutiveErrorsRef = useRef(0)
 
   const fetchCountRef = useRef(0)
   const fetchData = useCallback(async () => {
@@ -42,10 +45,13 @@ export function useAircraftsData(): AircraftsState {
     const t0 = performance.now()
     try {
       const res = isFirst
-        ? await perfFetch('aircraft', `http://${API_URL}:8000/api/aircrafts/positions`)
-        : await fetch(`http://${API_URL}:8000/api/aircrafts/positions`)
+        ? await perfFetch('aircraft', `${API_URL}/api/aircrafts/positions`)
+        : await fetch(`${API_URL}/api/aircrafts/positions`)
       const result = isFirst ? await perfJson<any>('aircraft', res) : await res.json()
       if (isFirst) perfDone('aircraft', result.data?.length ?? 0, t0)
+
+      consecutiveErrorsRef.current = 0
+      setApiError(false)
 
       const newCount = result.data?.length ?? 0
       if (newCount !== prevCountRef.current) {
@@ -55,6 +61,8 @@ export function useAircraftsData(): AircraftsState {
       setLastUpdate(new Date())
     } catch (error) {
       console.error('Erreur lors du chargement des données avions:', error)
+      consecutiveErrorsRef.current++
+      if (consecutiveErrorsRef.current >= 2) setApiError(true)
     }
   }, [])
 
@@ -64,5 +72,5 @@ export function useAircraftsData(): AircraftsState {
     return () => clearInterval(interval)
   }, [fetchData])
 
-  return useMemo(() => ({ aircraftsData, lastUpdate }), [aircraftsData, lastUpdate])
+  return useMemo(() => ({ aircraftsData, lastUpdate, apiError }), [aircraftsData, lastUpdate, apiError])
 }

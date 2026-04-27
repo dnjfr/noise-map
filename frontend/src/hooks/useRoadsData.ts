@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { perfFetch, perfJson, perfDone } from './perfLog'
 
 const API_URL = import.meta.env.VITE_API_URL
@@ -25,11 +25,13 @@ export interface RoadsSegment {
  * puis 30s une fois les données stabilisées (3 polls consécutifs sans changement de comptage).
  * @returns { roadsData, lastUpdate }
  */
-export function useRoadsData(): { roadsData: RoadsSegment[]; lastUpdate: Date | null } {
+export function useRoadsData(): { roadsData: RoadsSegment[]; lastUpdate: Date | null; apiError: boolean } {
   const [roadsData, setRoadsData] = useState<RoadsSegment[]>([])
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null)
-  const prevCountRef = useState(0)
+  const [apiError, setApiError] = useState(false)
+  const prevCountRef = useRef(0)
 
+  const consecutiveErrorsRef = useRef(0)
   const fetchCountRef = useRef(0)
   const fetchData = useCallback(async () => {
     const isFirst = fetchCountRef.current === 0
@@ -37,12 +39,18 @@ export function useRoadsData(): { roadsData: RoadsSegment[]; lastUpdate: Date | 
     const t0 = performance.now()
     try {
       const response = isFirst
-        ? await perfFetch('road', `http://${API_URL}:8000/api/roads/segments_noise`)
-        : await fetch(`http://${API_URL}:8000/api/roads/segments_noise`)
-      if (!response.ok) return
+        ? await perfFetch('road', `${API_URL}/api/roads/segments_noise`)
+        : await fetch(`${API_URL}/api/roads/segments_noise`)
+      if (!response.ok) {
+        consecutiveErrorsRef.current++
+        if (consecutiveErrorsRef.current >= 2) setApiError(true)
+        return 0
+      }
       const result = isFirst
         ? await perfJson<any>('road', response)
         : await response.json()
+      consecutiveErrorsRef.current = 0
+      setApiError(false)
       setRoadsData(result.data || [])
       setLastUpdate(new Date())
       const count = (result.data || []).length
@@ -50,6 +58,8 @@ export function useRoadsData(): { roadsData: RoadsSegment[]; lastUpdate: Date | 
       return count
     } catch (error) {
       console.error('Erreur chargement données routières:', error)
+      consecutiveErrorsRef.current++
+      if (consecutiveErrorsRef.current >= 2) setApiError(true)
       return 0
     }
   }, [])
@@ -60,14 +70,14 @@ export function useRoadsData(): { roadsData: RoadsSegment[]; lastUpdate: Date | 
 
     const run = async () => {
       const count = await fetchData() ?? 0
-      const prev = prevCountRef[0]
+      const prev = prevCountRef.current
 
       if (count > 0 && count === prev) {
         stableCount++
       } else {
         stableCount = 0
       }
-      prevCountRef[0] = count
+      prevCountRef.current = count
 
       // Passer en mode lent après 3 polls consécutifs sans changement
       const nextInterval = stableCount >= 3 ? SLOW_INTERVAL : FAST_INTERVAL
@@ -78,5 +88,5 @@ export function useRoadsData(): { roadsData: RoadsSegment[]; lastUpdate: Date | 
     return () => clearTimeout(intervalId)
   }, [fetchData])
 
-  return { roadsData, lastUpdate }
+  return useMemo(() => ({ roadsData, lastUpdate, apiError }), [roadsData, lastUpdate, apiError])
 }

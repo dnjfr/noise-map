@@ -1,6 +1,11 @@
 
 # Changelog
 
+
+## [v1.2.0] - 2026-04-27
+- Revue de code 
+- Corrections de bugs et refactoring
+
 ## [v1.1.17] - 2026-04-24
 - Enrichissement de certains shapes manquants à partir du fichier RFN
 - Modification de l'emplacement du dossier provisoire gtfs-statique

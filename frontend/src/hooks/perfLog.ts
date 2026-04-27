@@ -1,7 +1,7 @@
 /** Utilitaire de mesure de performance pour les hooks de données. */
 
-// Mettre à false pour désactiver tous les logs de performance en console
-const DEBUG_PERF = true
+// Contrôlé par la variable d'env VITE_DEBUG_PERF=true (false par défaut en production)
+const DEBUG_PERF = import.meta.env.VITE_DEBUG_PERF === 'true'
 
 const T0 = performance.now()
 

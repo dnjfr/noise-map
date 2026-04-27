@@ -269,6 +269,7 @@ services:
         VITE_MAPTILER_DEFAULT_MAP: $VITE_MAPTILER_DEFAULT_MAP
         VITE_MAPTILER_DARK_MAP: $VITE_MAPTILER_DARK_MAP
         VITE_API_URL: $VITE_API_URL
+        VITE_DEBUG_PERF: $VITE_DEBUG_PERF
     container_name: noise-frontend
     depends_on:
       - api

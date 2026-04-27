@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import math
 import time
@@ -16,14 +17,9 @@ logger = logging.getLogger(__name__)
 load_dotenv(override=True)
 
 KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
-TIMESCALE_HOST     = os.getenv("TIMESCALE_HOST")
-TIMESCALE_PORT     = os.getenv("TIMESCALE_PORT")
-TIMESCALE_NAME     = os.getenv("TIMESCALE_NAME")
-TIMESCALE_USER     = os.getenv("TIMESCALE_USER")
-TIMESCALE_PASSWORD = os.getenv("TIMESCALE_PASSWORD")
-DATABASE_URL = f"postgresql+psycopg://{TIMESCALE_USER}:{TIMESCALE_PASSWORD}@{TIMESCALE_HOST}:{TIMESCALE_PORT}/{TIMESCALE_NAME}"
 
 GRID_SIZE = 0.1
+_SERVICE_TYPE_RE = re.compile(r'_[FR]:([A-Z]+):')
 
 Base = declarative_base()
 
@@ -57,10 +53,14 @@ class RailwayNoiseLevel(Base):
 
 def create_db_engine():
     max_retries = 10
+    database_url = (
+        f"postgresql+psycopg://{os.getenv('TIMESCALE_USER')}:{os.getenv('TIMESCALE_PASSWORD')}"
+        f"@{os.getenv('TIMESCALE_HOST')}:{os.getenv('TIMESCALE_PORT')}/{os.getenv('TIMESCALE_NAME')}"
+    )
     for attempt in range(max_retries):
         try:
             engine = create_engine(
-                DATABASE_URL,
+                database_url,
                 pool_pre_ping=True,
                 pool_size=10,
                 max_overflow=20,
@@ -107,8 +107,7 @@ DEFAULT_REF = {'l_ref': 80.0, 'v_ref': 140.0}
 
 def extract_service_type(trip_id: str) -> str:
     """Extrait TGV/TER/IC/FRET du trip_id SNCF (ex: OCESN..._F:TER:...)"""
-    import re
-    m = re.search(r'_[FR]:([A-Z]+):', trip_id)
+    m = _SERVICE_TYPE_RE.search(trip_id)
     return m.group(1) if m else ''
 
 
@@ -173,6 +172,8 @@ def process_batch_and_calculate_noise(session, batch_data):
         grid_noise[grid_id]["coords"] = (lat, lon)
 
     for grid_id, data in grid_noise.items():
+        if data["count"] == 0:
+            continue
         avg_noise = data["total_noise"] / data["count"]
         lat, lon = data["coords"]
 

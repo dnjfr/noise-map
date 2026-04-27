@@ -165,9 +165,10 @@ def interpolate_position(trip_id, gtfs_static, now_utc, delay_seconds=0):
     if not st_list or len(st_list) < 2:
         return None
 
-    # Current time as seconds since midnight, ajusté du retard réel
-    # Ex : retard de 600s → le train est à la position théorique d'il y a 10 minutes
-    now_secs = now_utc.hour * 3600 + now_utc.minute * 60 + now_utc.second - delay_seconds
+    # Current time as seconds since midnight, ajusté du retard réel.
+    # On borne le retard à ±3h pour éviter un now_secs invalide si la donnée GTFS-RT est aberrante.
+    clamped_delay = max(-10800, min(delay_seconds, 10800))
+    now_secs = now_utc.hour * 3600 + now_utc.minute * 60 + now_utc.second - clamped_delay
 
     # Find current segment (between which two stops)
     prev_stop = None

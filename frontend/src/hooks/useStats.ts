@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 
 const API_URL = import.meta.env.VITE_API_URL
 const UPDATE_INTERVAL = 5000
@@ -15,13 +15,22 @@ export interface Stats {
   road_max_noise_db: number
 }
 
-export function useStats(): Stats | null {
+export function useStats(): { stats: Stats | null; apiError: boolean } {
   const [stats, setStats] = useState<Stats | null>(null)
+  const [apiError, setApiError] = useState(false)
+  const consecutiveErrorsRef = useRef(0)
 
   const fetchStats = useCallback(async () => {
     try {
-      const res = await fetch(`http://${API_URL}:8000/api/stats`)
+      const res = await fetch(`${API_URL}/api/stats`)
+      if (!res.ok) {
+        consecutiveErrorsRef.current++
+        if (consecutiveErrorsRef.current >= 2) setApiError(true)
+        return
+      }
       const data: Stats = await res.json()
+      consecutiveErrorsRef.current = 0
+      setApiError(false)
       setStats(prev => {
         if (
           prev != null &&
@@ -39,6 +48,8 @@ export function useStats(): Stats | null {
       })
     } catch (error) {
       console.error('Erreur lors du chargement des statistiques:', error)
+      consecutiveErrorsRef.current++
+      if (consecutiveErrorsRef.current >= 2) setApiError(true)
     }
   }, [])
 
@@ -48,5 +59,5 @@ export function useStats(): Stats | null {
     return () => clearInterval(interval)
   }, [fetchStats])
 
-  return stats
+  return { stats, apiError }
 }

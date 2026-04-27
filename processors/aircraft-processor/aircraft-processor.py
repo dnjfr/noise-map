@@ -3,7 +3,6 @@ import json
 import math
 from datetime import datetime
 from kafka import KafkaConsumer
-from datetime import datetime
 from sqlalchemy import create_engine, Column, String, Float, Integer, Boolean, TIMESTAMP, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 from collections import defaultdict
@@ -19,14 +18,6 @@ load_dotenv(override=True)
 # Configuration
 KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
 
-# Configuration SQLAlchemy
-TIMESCALE_USER = os.getenv("TIMESCALE_USER")
-TIMESCALE_PASSWORD = os.getenv("TIMESCALE_PASSWORD")
-TIMESCALE_HOST = os.getenv("TIMESCALE_HOST")
-TIMESCALE_PORT = os.getenv("TIMESCALE_PORT")
-TIMESCALE_NAME = os.getenv("TIMESCALE_NAME")
-
-DATABASE_URL = f"postgresql+psycopg://{TIMESCALE_USER}:{TIMESCALE_PASSWORD}@{TIMESCALE_HOST}:{TIMESCALE_PORT}/{TIMESCALE_NAME}"
 
 # Paramètres de la grille (France divisée en grilles de ~10km)
 GRID_SIZE = 0.1  # degrés (~10km)
@@ -79,11 +70,15 @@ def create_db_engine():
     """
     max_retries = 10
     retry_delay = 5
-    
+    database_url = (
+        f"postgresql+psycopg://{os.getenv('TIMESCALE_USER')}:{os.getenv('TIMESCALE_PASSWORD')}"
+        f"@{os.getenv('TIMESCALE_HOST')}:{os.getenv('TIMESCALE_PORT')}/{os.getenv('TIMESCALE_NAME')}"
+    )
+
     for attempt in range(max_retries):
         try:
             engine = create_engine(
-                DATABASE_URL,
+                database_url,
                 pool_pre_ping=True,
                 pool_size=10,
                 max_overflow=20,
@@ -409,6 +404,8 @@ def process_batch_and_calculate_noise(session, batch_data):
     
     # Stocker les niveaux de bruit agrégés
     for grid_id, data in grid_noise.items():
+        if data["count"] == 0:
+            continue
         avg_noise = data["total_noise"] / data["count"]
         lat, lon = data["coords"]
         
@@ -448,46 +445,58 @@ def main():
     global MADB_CACHE
     MADB_CACHE = load_madb_lookup(engine)
 
-    consumer = create_kafka_consumer()
-    
     batch = []
     batch_size = 50
     last_process_time = time.time()
     process_interval = 30  # Calculer le bruit toutes les 30 secondes
-    
+
     try:
-        for message in consumer:
-            data = message.value
-            batch.append(data)
-            
-            # Traiter par lots
-            if len(batch) >= batch_size or (time.time() - last_process_time) > process_interval:
-                session = Session()
-                
-                try:
-                    # Stocker les positions
-                    for item in batch:
-                        store_aircraft_position(session, item)
-                    
-                    # Calculer et stocker le bruit
-                    process_batch_and_calculate_noise(session, batch)
-                    
-                    session.commit()
-                    logger.info(f"✅ Traité {len(batch)} positions - Bruit calculé")
-                    
-                except Exception as e:
-                    session.rollback()
-                    logger.error(f"Erreur lors du traitement: {e}")
-                finally:
-                    session.close()
-                
+        while True:
+            consumer = None
+            try:
+                consumer = create_kafka_consumer()
+                for message in consumer:
+                    data = message.value
+                    batch.append(data)
+
+                    # Traiter par lots
+                    if len(batch) >= batch_size or (time.time() - last_process_time) > process_interval:
+                        session = Session()
+
+                        try:
+                            # Stocker les positions
+                            for item in batch:
+                                store_aircraft_position(session, item)
+
+                            # Calculer et stocker le bruit
+                            process_batch_and_calculate_noise(session, batch)
+
+                            session.commit()
+                            logger.info(f"✅ Traité {len(batch)} positions - Bruit calculé")
+
+                        except Exception as e:
+                            session.rollback()
+                            logger.error(f"Erreur lors du traitement: {e}")
+                        finally:
+                            session.close()
+
+                        batch = []
+                        last_process_time = time.time()
+
+            except KeyboardInterrupt:
+                logger.info("Arrêt du processor")
+                break
+            except Exception as e:
+                logger.error(f"Erreur consumer Kafka, reconnexion dans 5s : {e}")
                 batch = []
-                last_process_time = time.time()
-    
-    except KeyboardInterrupt:
-        logger.info("Arrêt du processor")
+                time.sleep(5)
+            finally:
+                if consumer is not None:
+                    try:
+                        consumer.close()
+                    except Exception:
+                        pass
     finally:
-        consumer.close()
         engine.dispose()
 
 if __name__ == "__main__":

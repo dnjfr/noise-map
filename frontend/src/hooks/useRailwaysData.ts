@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { perfFetch, perfJson, perfDone } from './perfLog'
 
 const API_URL = import.meta.env.VITE_API_URL
@@ -27,10 +27,12 @@ export interface Train {
  *
  * @returns { railwaysData, lastUpdate }
  */
-export function useRailwaysData(): { railwaysData: Train[]; lastUpdate: Date | null } {
+export function useRailwaysData(): { railwaysData: Train[]; lastUpdate: Date | null; apiError: boolean } {
   const [railwaysData, setRailwaysData] = useState<Train[]>([])
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null)
+  const [apiError, setApiError] = useState(false)
 
+  const consecutiveErrorsRef = useRef(0)
   const fetchCountRef = useRef(0)
   const fetchData = useCallback(async () => {
     const isFirst = fetchCountRef.current === 0
@@ -38,17 +40,25 @@ export function useRailwaysData(): { railwaysData: Train[]; lastUpdate: Date | n
     const t0 = performance.now()
     try {
       const response = isFirst
-        ? await perfFetch('railway-current', `http://${API_URL}:8000/api/railways/positions`)
-        : await fetch(`http://${API_URL}:8000/api/railways/positions`)
-      if (!response.ok) return
+        ? await perfFetch('railway-current', `${API_URL}/api/railways/positions`)
+        : await fetch(`${API_URL}/api/railways/positions`)
+      if (!response.ok) {
+        consecutiveErrorsRef.current++
+        if (consecutiveErrorsRef.current >= 2) setApiError(true)
+        return
+      }
       const result = isFirst
         ? await perfJson<any>('railway-current', response)
         : await response.json()
+      consecutiveErrorsRef.current = 0
+      setApiError(false)
       setRailwaysData(result.data || [])
       setLastUpdate(new Date())
       if (isFirst) perfDone('railway-current', result.data?.length ?? 0, t0)
     } catch (error) {
       console.error('Erreur chargement données ferroviaires:', error)
+      consecutiveErrorsRef.current++
+      if (consecutiveErrorsRef.current >= 2) setApiError(true)
     }
   }, [])
 
@@ -58,5 +68,5 @@ export function useRailwaysData(): { railwaysData: Train[]; lastUpdate: Date | n
     return () => clearInterval(interval)
   }, [fetchData])
 
-  return { railwaysData, lastUpdate }
+  return useMemo(() => ({ railwaysData, lastUpdate, apiError }), [railwaysData, lastUpdate, apiError])
 }

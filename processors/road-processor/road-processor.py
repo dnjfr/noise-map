@@ -15,12 +15,6 @@ logger = logging.getLogger(__name__)
 load_dotenv(override=True)
 
 KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
-TIMESCALE_HOST     = os.getenv("TIMESCALE_HOST")
-TIMESCALE_PORT     = os.getenv("TIMESCALE_PORT")
-TIMESCALE_NAME     = os.getenv("TIMESCALE_NAME")
-TIMESCALE_USER     = os.getenv("TIMESCALE_USER")
-TIMESCALE_PASSWORD = os.getenv("TIMESCALE_PASSWORD")
-DATABASE_URL = f"postgresql+psycopg://{TIMESCALE_USER}:{TIMESCALE_PASSWORD}@{TIMESCALE_HOST}:{TIMESCALE_PORT}/{TIMESCALE_NAME}"
 
 Base = declarative_base()
 
@@ -37,10 +31,14 @@ class RoadNoiseLevel(Base):
 
 def create_db_engine():
     max_retries = 10
+    database_url = (
+        f"postgresql+psycopg://{os.getenv('TIMESCALE_USER')}:{os.getenv('TIMESCALE_PASSWORD')}"
+        f"@{os.getenv('TIMESCALE_HOST')}:{os.getenv('TIMESCALE_PORT')}/{os.getenv('TIMESCALE_NAME')}"
+    )
     for attempt in range(max_retries):
         try:
             engine = create_engine(
-                DATABASE_URL,
+                database_url,
                 pool_pre_ping=True,
                 pool_size=10,
                 max_overflow=20,
@@ -76,8 +74,13 @@ def create_kafka_consumer():
     raise Exception("Impossible de se connecter à Kafka")
 
 
-DEFAULT_SPEED_KMH = 90   # Vitesse par défaut si absente mais flow disponible
-DEFAULT_FLOW_VEH_H = 500  # Débit par défaut si absent mais speed disponible (trafic modéré)
+# 90 km/h : vitesse de référence autoroute/nationale hors agglomération (source : CERTU/Sétra,
+#   guide NMPB-Routes-2008 §3.2 — vitesse nominale retenue pour les tronçons sans mesure GPS)
+DEFAULT_SPEED_KMH = 90
+
+# 500 veh/h : débit de référence pour trafic interurbain modéré sur 2×2 voies (source : Sétra 2009,
+#   tableau 2 — seuil médian entre trafic faible <200 et chargé >1000 veh/h)
+DEFAULT_FLOW_VEH_H = 500
 
 
 def _energy_add(l1, l2):
@@ -147,8 +150,10 @@ def calculate_road_noise(flow_veh_h, speed_kmh, nb_voies=1, highway_type="trunk"
         l_source = _energy_add(terme_vl, terme_pl)
     elif terme_vl is not None:
         l_source = terme_vl
-    else:
+    elif terme_pl is not None:
         l_source = terme_pl
+    else:
+        return None
 
     # Propagation cylindrique à 25m (source linéaire) : L(r) = L_W/m - 10·log(2·π·r)
     l_25m = l_source - 10 * math.log10(2 * math.pi * 25)

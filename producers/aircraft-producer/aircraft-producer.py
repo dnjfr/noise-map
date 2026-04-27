@@ -80,16 +80,15 @@ def fetch_zone(lat, lon, radius):
     for url in (primary_url, fallback_url):
         try:
             response = requests.get(url, timeout=15)
-            if response.status_code == 429 and url == primary_url:
-                logger.warning(f"429 adsb.one zone ({lat}, {lon}) — bascule sur airplanes.live")
+            if response.status_code == 429:
+                logger.warning(f"429 {url} zone ({lat}, {lon}) — source ignorée")
                 continue
             response.raise_for_status()
             data = response.json()
             return data.get("ac", [])
         except Exception as e:
             logger.error(f"Erreur zone ({lat}, {lon}) [{url}]: {e}")
-            if url == primary_url:
-                continue
+            continue
     return []
 
 
@@ -110,8 +109,11 @@ def filter_and_publish(producer, aircraft_list, label=""):
             continue
         if ac.get("lat") is None or ac.get("lon") is None:
             continue
-        producer.send("aircraft-positions", value=parse_aircraft(ac))
-        published += 1
+        try:
+            producer.send("aircraft-positions", value=parse_aircraft(ac))
+            published += 1
+        except Exception as e:
+            logger.error(f"Erreur Kafka publish avion {ac.get('hex', '?')}: {e}")
     producer.flush()
     if label:
         logger.info(f"{label}: {published} avions publiés")
