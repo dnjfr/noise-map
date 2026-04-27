@@ -35,7 +35,7 @@ Trois flux parallèles :
 ### Prérequis
 
 - Docker et Docker Compose installés
-- `xz` et `unzip` disponibles
+- `make`, `xz` et `unzip` disponibles
 - Au moins 6 Go de RAM disponibles
 - Clés API : [MapTiler](https://www.maptiler.com/) et [TomTom](https://developer.tomtom.com/)
 
@@ -181,7 +181,7 @@ noise-map/
 
 ### Démarrage
 
-1. **Cloner le dépôt**
+1. **Cloner le dépôt** et faire `cd noise-map`
 
 2. **Créer le fichier `.env`** à partir du fichier exemple et renseigner votre clé API TomTom et la ou les carte(s) générée(s) via MapTiler :
 ```bash
