@@ -1,6 +1,16 @@
 
 # Changelog
 
+## [v1.2.3] - 2026-04-27
+- Correction Docker Compose 
+- Amélioration du requirements.txt de l'API
+
+## [v1.2.2] - 2026-04-27
+- Modification API sur les cors 
+- Modification Nginx
+
+## [v1.2.1] - 2026-04-27
+- Modification du README et de .gitignore
 
 ## [v1.2.0] - 2026-04-27
 - Revue de code 

@@ -255,6 +255,7 @@ services:
       TIMESCALE_NAME: $TIMESCALE_NAME
       TIMESCALE_USER: $TIMESCALE_USER
       TIMESCALE_PASSWORD: $TIMESCALE_PASSWORD
+      CORS_ORIGINS: $CORS_ORIGINS
     mem_limit: 512m
     memswap_limit: 512m
     restart: unless-stopped
