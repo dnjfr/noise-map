@@ -1,6 +1,11 @@
 
 # Changelog
 
+## [v1.2.5] - 2026-04-28
+- Rajout du choix d'activer ou désactiver les docs dans l'API 
+- Rajout d'une limite de requêtage dans l'API 
+- Optimisation de la mémoire de TimescaleDB
+
 ## [v1.2.4] - 2026-04-28
 - Correction des CORS dans le fichier Nginx
 - Modification de la gestion de mots de passe complexes dans l'API, les producers et les processeurs

@@ -53,7 +53,7 @@ services:
   timescaledb:
     image: timescale/timescaledb:2.25.2-pg15
     container_name: timescaledb
-    command: postgres -c max_connections=100
+    command: postgres -c max_connections=100 -c shared_buffers=512MB -c effective_cache_size=1536MB -c work_mem=4MB
     ports:
       - "5433:5432"
     environment:
@@ -256,6 +256,7 @@ services:
       TIMESCALE_USER: $TIMESCALE_USER
       TIMESCALE_PASSWORD: $TIMESCALE_PASSWORD
       CORS_ORIGINS: $CORS_ORIGINS
+      ENABLE_DOCS: $ENABLE_DOCS
     mem_limit: 512m
     memswap_limit: 512m
     restart: unless-stopped

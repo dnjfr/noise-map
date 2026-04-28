@@ -1,7 +1,12 @@
 import os
 import threading
-from fastapi import FastAPI, HTTPException, Depends, Query
+from fastapi import FastAPI, HTTPException, Depends, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+from starlette.responses import JSONResponse
 from sqlalchemy import create_engine, Column, String, Float, Integer, Boolean, TIMESTAMP, JSON, text, desc, func
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
 from dotenv import load_dotenv
@@ -18,7 +23,31 @@ logger = logging.getLogger(__name__)
 
 load_dotenv(override=True)
 
-app = FastAPI(title="Noise Map API", version="1.0.0")
+_enable_docs = os.getenv("ENABLE_DOCS", "false").lower() == "true"
+
+
+def _get_real_ip(request: Request) -> str:
+    # nginx transmet X-Real-IP avec l'IP du client réel
+    return request.headers.get("X-Real-IP") or request.headers.get("X-Forwarded-For", "").split(",")[0].strip() or request.client.host
+
+
+limiter = Limiter(key_func=_get_real_ip)
+
+app = FastAPI(
+    title="Noise Map API",
+    version="1.0.0",
+    docs_url="/docs" if _enable_docs else None,
+    redoc_url="/redoc" if _enable_docs else None,
+)
+app.state.limiter = limiter
+app.add_exception_handler(
+    RateLimitExceeded,
+    lambda request, exc: JSONResponse(
+        status_code=429,
+        content={"detail": "Trop de requêtes, réessayez dans un instant."},
+    ),
+)
+app.add_middleware(SlowAPIMiddleware)
 
 origins = [
     origin.strip()
@@ -148,7 +177,8 @@ def get_db():
         db.close()
 
 @app.get("/")
-def read_root():
+@limiter.limit("60/minute")
+def read_root(request: Request):
     """Endpoint racine de l'API.
 
     Retourne les informations de base (nom, version) et la liste des
@@ -171,7 +201,9 @@ def read_root():
 
 
 @app.get("/api/aircrafts/positions")
+@limiter.limit("120/minute")
 def get_current_aircraft(
+    request: Request,
     limit: Optional[int] = 500,
     db: Session = Depends(get_db)
 ):
@@ -239,7 +271,8 @@ def get_current_aircraft(
 
 
 @app.get("/api/roads/segments_noise")
-def get_current_road(db: Session = Depends(get_db)):
+@limiter.limit("30/minute")
+def get_current_road(request: Request, db: Session = Depends(get_db)):
     """Retourne les segments routiers avec leur dernier niveau de bruit (< 10 min).
 
     Joint road_noise_levels (DISTINCT ON code_pme, ordre time DESC) avec
@@ -312,7 +345,8 @@ def get_current_road(db: Session = Depends(get_db)):
 
 
 @app.get("/api/railways/positions")
-def get_current_railway(db: Session = Depends(get_db)):
+@limiter.limit("120/minute")
+def get_current_railway(request: Request, db: Session = Depends(get_db)):
     """Retourne les positions actuelles des trains (GTFS-RT, fenêtre 5 min).
 
     DISTINCT ON trip_id (dernier enregistrement). Joint rail_trips pour
@@ -381,7 +415,8 @@ def get_current_railway(db: Session = Depends(get_db)):
 
 
 @app.get("/api/railways/shapes")
-def get_railway_shapes(db: Session = Depends(get_db), detail: str = "high"):
+@limiter.limit("30/minute")
+def get_railway_shapes(request: Request, db: Session = Depends(get_db), detail: str = "high"):
     """Retourne les shapes GTFS des trips actifs (gzip, cache 2 min).
 
     Joint railway_positions (actifs 5 min) → rail_trips → rail_shapes.
@@ -522,7 +557,8 @@ def _fetch_road_stats(db: Session, cutoff) -> dict:
 
 
 @app.get("/api/stats")
-def get_stats(db: Session = Depends(get_db)):
+@limiter.limit("120/minute")
+def get_stats(request: Request, db: Session = Depends(get_db)):
     """Retourne les statistiques globales de la carte pour les 3 réseaux.
 
     Fenêtre temporelle : 2 min pour comptages/bruit, 6 min pour routes
@@ -568,7 +604,9 @@ def _simplify_geom(geom: list, max_pts: int = 20) -> list:
 
 
 @app.get("/api/noise/history")
+@limiter.limit("30/minute")
 def get_noise_history(
+    request: Request,
     grid_id: str,
     hours: int = Query(default=1, ge=1, le=24),
     db: Session = Depends(get_db)
