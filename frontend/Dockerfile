@@ -27,8 +27,13 @@ RUN npm run build
 # Stage 2: Serve
 FROM nginx:alpine
 
+ARG VITE_API_URL
+ENV API_URL=$VITE_API_URL
+
 COPY --from=builder /app/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY nginx.conf /etc/nginx/conf.d/default.conf.template
+RUN envsubst '${API_URL}' < /etc/nginx/conf.d/default.conf.template > /etc/nginx/conf.d/default.conf \
+    && rm /etc/nginx/conf.d/default.conf.template
 
 EXPOSE 80
 

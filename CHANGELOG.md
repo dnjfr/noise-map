@@ -1,6 +1,14 @@
 
 # Changelog
 
+## [v1.2.4] - 2026-04-28
+- Correction des CORS dans le fichier Nginx
+- Modification de la gestion de mots de passe complexes dans l'API, les producers et les processeurs
+- Modification de la zone aérienne pour couvrir la même zone en moins de requêtes
+- Refonte de la légende
+- Modification de l'architecture pour prendre en compte le nouveau découpage aérien
+- Modification du READMME.md
+
 ## [v1.2.3] - 2026-04-27
 - Correction Docker Compose 
 - Amélioration du requirements.txt de l'API

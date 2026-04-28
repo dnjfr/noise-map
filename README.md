@@ -4,7 +4,7 @@ Visualisation en quasi temps réel des niveaux de bruit aérien, routier et ferr
 
 ## 📋 Idée d'origine
 
-Le bruit est un fléau qui génère stress et fatigue. Mais se rend t'on vraiment compte du bruit qui nous entoure ?
+A t'on conscience du bruit qui nous entoure ? Le bruit génère stress et fatigue. 
 
 Les cartes de bruit existantes reposent sur des modèles de propagation acoustique (NMPB, CNOSSOS-EU), alimentés par des données très précises (trafic, géométrie, topographie). Ce sont des snapshots statiques, basés sur des comptages périodiques. À ma connaissance, il n'existe pas de carte en temps réel - c'est de là qu'est né ce projet.
 
@@ -120,17 +120,26 @@ noise-map/
 ├── database-init/
 │   ├── db-backup/
 │   │   └── noise_map_YYYYMMDD.sql.gz   # Dump tables de référence statiques
-│   ├── gtfs-statique/           # Fichiers GTFS SNCF (stops, routes, shapes…)
+│   ├── fix-shape-rfn/           # Correction des shapes dégradées via le RFN
+│   │   ├── fix-shape-rfn.py
+│   │   ├── Dockerfile
+│   │   └── requirements.txt
+│   ├── lignes-rfn/
+│   │   └── formes-des-lignes-du-rfn.csv  # Données RFN (tracés de référence SNCF)
 │   ├── shapes-import/
-│   │   └── shapes.tar.xz        # Tracés ferroviaires générés par pfaedle
+│   │   ├── shapes.tar.xz.part-aa  # Tracés ferroviaires générés par pfaedle (archive fractionnée)
+│   │   └── shapes.tar.xz.part-ab
 │   ├── db-init.sh               # Script d'initialisation complet
 │   └── db-init.sql              # Schéma PostgreSQL
 ├── frontend/
 │   ├── src/
+│   │   ├── assets/              # Icones des cartes et favicon
 │   │   ├── components/          # Composants React
 │   │   ├── features/            # Logique métier par domaine
 │   │   ├── hooks/               # Hooks React personnalisés
 │   │   ├── lib/                 # Utilitaires
+│   │   ├── index.css
+│   │   ├── main.tsx
 │   │   └── App.tsx
 │   ├── Dockerfile
 │   ├── nginx.conf
@@ -241,27 +250,35 @@ make logs-api
 
 ## 🗄️ Base de données
 
-### Tables hypertables (séries temporelles, rétention 7 jours)
+### Tables hypertables (séries temporelles)
 
-| Table | Description |
-|---|---|
-| `aircraft_positions` | Positions brutes des avions |
-| `aircraft_noise_levels` | Bruit aérien agrégé par cellule de grille |
-| `railway_positions` | Positions des trains |
-| `railway_noise_levels` | Bruit ferroviaire par cellule |
-| `road_noise_levels` | Bruit routier par segment |
+| Table | Description | Rétention |
+|---|---|---|
+| `aircraft_positions` | Positions brutes des avions | 1 jour |
+| `aircraft_noise_levels` | Bruit aérien agrégé par cellule de grille | 3 jours |
+| `railway_positions` | Positions des trains | 1 jour |
+| `railway_noise_levels` | Bruit ferroviaire par cellule | 3 jours |
+| `road_noise_levels` | Bruit routier par segment | 3 jours |
 
 ### Tables de référence statiques (importées une seule fois)
 
+Restaurées depuis le backup lors de l'initialisation :
+
 | Table | Description |
 |---|---|
-| `rail_stops` | Arrêts ferroviaires GTFS SNCF |
-| `rail_routes` | Lignes ferroviaires GTFS SNCF |
-| `rail_shapes` | Tracés géographiques des lignes (~461 Mo, générés par pfaedle) |
-| `road_segments_ref` | Géométries OSM des segments autoroutiers |
-| `madb_noise_ref` | Référentiel bruit MADB |
 | `icao_type_mapping` | Correspondance types avions ICAO |
+| `madb_noise_ref` | Référentiel bruit MADB/EASA |
 | `icao_noise_pattern` | Patrons de bruit par type d'avion |
+
+Générées lors de l'initialisation :
+
+| Table | Description |
+|---|---|
+| `rail_shapes` | Tracés géographiques des lignes (~461 Mo, générés par pfaedle) |
+| `rail_route_shapes` | Mapping géométrique route/trip calculé par `assign-shapes.py` |
+| `rail_stops` | Arrêts ferroviaires (importés depuis le GTFS SNCF) |
+| `rail_routes` | Lignes ferroviaires (importées depuis le GTFS SNCF) |
+| `road_segments_ref` | Géométries OSM des segments autoroutiers (peuplées par le road-producer) |
 
 ### Tables rechargées quotidiennement
 
@@ -436,7 +453,7 @@ make assign-shapes
 
 ### Sources de données
 
-- **ADS-B One** : agrégateur communautaire de récepteurs ADS-B, sans limite de requêtes connue, mais la couverture dépend de la densité des récepteurs bénévoles - zones rurales ou en altitude potentiellement sous-représentées.
+- **ADS-B One via Airplanes.live** : agrégateur communautaire de récepteurs ADS-B, limité à 1 requête par seconde, mais la couverture dépend de la densité des récepteurs bénévoles - zones rurales ou en altitude potentiellement sous-représentées.
 - **TomTom** : couverture limitée aux tronçons autoroutiers et voies rapides (`motorway` / `trunk`). Les routes secondaires, départementales et urbaines ne sont pas incluses.
 - **GTFS-RT SNCF de transport.data.gouv.fr** : données officielles SNCF, mises à jour quotidiennement à 18h. Les perturbations de dernière minute (suppression de train, changement de voie) peuvent ne pas être reflétées immédiatement.
 
@@ -526,7 +543,9 @@ atténuation distance  = -10·log10(d / 25)     - propagation cylindrique depuis
 
 ## 📄 Licence
 
-Projet à usage éducatif et personnel.
+Ce projet est distribué sous licence [MIT](LICENSE).
+
+Les données utilisées sont soumises à leurs licences respectives : SNCF GTFS ([Licence Ouverte v2](https://www.etalab.gouv.fr/licence-ouverte-open-licence)), OpenStreetMap ([ODbL](https://opendatacommons.org/licenses/odbl/)), EASA MAdB (usage académique/recherche).
 
 ---
 

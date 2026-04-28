@@ -9,6 +9,7 @@ from typing import Optional
 from datetime import datetime, timedelta
 from cachetools import TTLCache
 from fastapi.responses import Response
+from urllib.parse import quote_plus
 import orjson
 import logging
 
@@ -36,7 +37,7 @@ app.add_middleware(
 
 # Configuration SQLAlchemy
 TIMESCALE_USER = os.getenv("TIMESCALE_USER")
-TIMESCALE_PASSWORD = os.getenv("TIMESCALE_PASSWORD")
+TIMESCALE_PASSWORD = quote_plus(os.getenv("TIMESCALE_PASSWORD"))
 TIMESCALE_HOST = os.getenv("TIMESCALE_HOST")
 TIMESCALE_PORT = os.getenv("TIMESCALE_PORT")
 TIMESCALE_NAME = os.getenv("TIMESCALE_NAME")

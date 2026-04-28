@@ -4,3 +4,4 @@ python-dotenv
 gtfs-realtime-bindings
 sqlalchemy
 psycopg[binary]
+urllib3

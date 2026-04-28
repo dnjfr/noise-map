@@ -1,6 +1,16 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import type { Aircraft } from '../../hooks/useAircraftsData'
 import type { AnimData } from './constants'
+import { EARTH_RADIUS } from './constants'
+
+const MAX_ANIM_DISTANCE_M = 10_000 // au-delà de 10 km, téléportation directe
+
+function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const dLat = (lat2 - lat1) * Math.PI / 180
+  const dLng = (lng2 - lng1) * Math.PI / 180
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2
+  return EARTH_RADIUS * 2 * Math.asin(Math.sqrt(a))
+}
 
 export function useAircraftAnimationEngine(aircraftsData: Aircraft[], showAircrafts: boolean) {
   const positionsRef = useRef<Map<string, [number, number]>>(new Map())
@@ -40,11 +50,18 @@ export function useAircraftAnimationEngine(aircraftsData: Aircraft[], showAircra
 
       if (!prev || prev.latitude !== aircraft.latitude || prev.longitude !== aircraft.longitude) {
         const from = positionsRef.current.get(aircraft.icao24) ?? [aircraft.latitude, aircraft.longitude]
-        animDataRef.current.set(aircraft.icao24, {
-          fromLat: from[0], fromLng: from[1],
-          toLat: aircraft.latitude, toLng: aircraft.longitude,
-          startTime: performance.now(),
-        })
+        const dist = haversineDistance(from[0], from[1], aircraft.latitude, aircraft.longitude)
+
+        if (dist > MAX_ANIM_DISTANCE_M) {
+          positionsRef.current.set(aircraft.icao24, [aircraft.latitude, aircraft.longitude])
+          animDataRef.current.delete(aircraft.icao24)
+        } else {
+          animDataRef.current.set(aircraft.icao24, {
+            fromLat: from[0], fromLng: from[1],
+            toLat: aircraft.latitude, toLng: aircraft.longitude,
+            startTime: performance.now(),
+          })
+        }
       }
     }
   }, [aircraftsData])

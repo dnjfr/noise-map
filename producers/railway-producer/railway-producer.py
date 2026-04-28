@@ -9,6 +9,7 @@ from kafka import KafkaProducer
 from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
 from google.transit import gtfs_realtime_pb2
+from urllib.parse import quote_plus
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -20,7 +21,7 @@ TIMESCALE_HOST     = os.getenv("TIMESCALE_HOST")
 TIMESCALE_PORT     = os.getenv("TIMESCALE_PORT")
 TIMESCALE_NAME     = os.getenv("TIMESCALE_NAME")
 TIMESCALE_USER     = os.getenv("TIMESCALE_USER")
-TIMESCALE_PASSWORD = os.getenv("TIMESCALE_PASSWORD")
+TIMESCALE_PASSWORD = quote_plus(os.getenv("TIMESCALE_PASSWORD"))
 DATABASE_URL = f"postgresql+psycopg://{TIMESCALE_USER}:{TIMESCALE_PASSWORD}@{TIMESCALE_HOST}:{TIMESCALE_PORT}/{TIMESCALE_NAME}"
 
 # SNCF GTFS-RT URL

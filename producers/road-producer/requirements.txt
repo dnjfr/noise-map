@@ -7,3 +7,4 @@ sqlalchemy
 psycopg[binary]
 osmnx>=1.8.0
 mapbox-vector-tile
+urllib3

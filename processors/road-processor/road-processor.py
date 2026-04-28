@@ -8,6 +8,7 @@ from kafka import KafkaConsumer
 from sqlalchemy import create_engine, Column, String, Float, Integer, TIMESTAMP, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 from dotenv import load_dotenv
+from urllib.parse import quote_plus
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -32,7 +33,7 @@ class RoadNoiseLevel(Base):
 def create_db_engine():
     max_retries = 10
     database_url = (
-        f"postgresql+psycopg://{os.getenv('TIMESCALE_USER')}:{os.getenv('TIMESCALE_PASSWORD')}"
+        f"postgresql+psycopg://{os.getenv('TIMESCALE_USER')}:{quote_plus(os.getenv('TIMESCALE_PASSWORD'))}"
         f"@{os.getenv('TIMESCALE_HOST')}:{os.getenv('TIMESCALE_PORT')}/{os.getenv('TIMESCALE_NAME')}"
     )
     for attempt in range(max_retries):
