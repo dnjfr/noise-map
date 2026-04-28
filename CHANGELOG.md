@@ -1,6 +1,9 @@
 
 # Changelog
 
+## [v1.2.6] - 2026-04-28
+- Modification du README.md
+
 ## [v1.2.5] - 2026-04-28
 - Rajout du choix d'activer ou désactiver les docs dans l'API 
 - Rajout d'une limite de requêtage dans l'API 

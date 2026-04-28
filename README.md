@@ -15,7 +15,11 @@ Visualisation en quasi temps réel des niveaux de bruit aérien, routier et ferr
 
 A t'on conscience du bruit qui nous entoure ? Le bruit génère stress et fatigue. 
 
-Les cartes de bruit existantes reposent sur des modèles de propagation acoustique (NMPB, CNOSSOS-EU), alimentés par des données très précises (trafic, géométrie, topographie). Ce sont des snapshots statiques, basés sur des comptages périodiques. À ma connaissance, il n'existe pas de carte en temps réel - c'est de là qu'est né ce projet.
+Les cartes de bruit existantes reposent sur des modèles de propagation acoustique (NMPB, CNOSSOS-EU), alimentés par des données très précises (trafic, géométrie, topographie). Ce sont des snapshots statiques, basés sur des comptages périodiques. 
+
+À ma connaissance, il n'existe pas de carte en temps réel.
+
+C'est de là qu'est né ce projet.
 
 ## 🌐 Démonstration
 
@@ -28,7 +32,7 @@ https://www.cartedubruit.com
 </p>
 
 Trois flux parallèles :
-- **Aérien** (`aircraft-producer` / `aircraft-processor`) : positions ADS-B via adsb.one, calcul bruit en grille 0.1°
+- **Aérien** (`aircraft-producer` / `aircraft-processor`) : positions ADS-B via airplanes.live, calcul bruit en grille 0.1°
 - **Routier** (`road-producer` / `road-processor`) : trafic TomTom par segments autoroutiers, calcul bruit routier
 - **Ferroviaire** (`railway-producer` / `railway-processor`) : positions GTFS-RT SNCF, calcul bruit ferroviaire
 
@@ -346,8 +350,8 @@ Le frontend affiche dans la console du navigateur des métriques de chargement (
 
 Pour les activer ou les désactiver, modifier le flag `DEBUG_PERF` dans les deux fichiers suivants puis rebuilder le frontend (`make build-frontend`) :
 
-- `frontend/src/hooks/perfLog.ts` — logs des hooks de données (avions, trains, routes, stats)
-- `frontend/src/App.tsx` — logs d'ouverture et fermeture de page
+- `frontend/src/hooks/perfLog.ts` - logs des hooks de données (avions, trains, routes, stats)
+- `frontend/src/App.tsx` - logs d'ouverture et fermeture de page
 
 ```ts
 // true  → logs visibles dans la console du navigateur
