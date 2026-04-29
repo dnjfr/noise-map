@@ -1,6 +1,9 @@
 
 # Changelog
 
+## [v1.2.7] - 2026-04-28
+- Mise à jour du nombre de workers dans le Dockerfile de l'API qui les faisait planter
+
 ## [v1.2.6] - 2026-04-28
 - Modification du README.md
 

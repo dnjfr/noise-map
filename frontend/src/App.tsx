@@ -67,7 +67,7 @@ export default function App() {
     <div className="relative w-screen h-screen bg-slate-950">
       {hasApiError && (
         <div className="absolute top-0 left-0 right-0 z-[2000] bg-red-700/90 text-white text-sm text-center py-2 px-4 backdrop-blur-sm">
-          API inaccessible — les données affichées peuvent ne plus être à jour
+          API inaccessible - Les données affichées peuvent ne plus être à jour
         </div>
       )}
       <NoiseMap aircraftsData={aircraftsData} roadsData={roadsData} railwaysData={railwayDataWithShapes} railwaysShapes={shapesData} showAircrafts={showAircraft} showRoads={showRoads} showRailways={showRailways} mapStyleKey={mapStyleKey} />

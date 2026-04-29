@@ -43,7 +43,7 @@ export type MapStyleKey = 'default' | 'light' | 'dark'
 export const DEFAULT_STYLE_KEY: MapStyleKey = (Object.keys(MAP_STYLES)[0] as MapStyleKey) ?? 'default'
 
 const MIN_ZOOM = 6
-const MAX_ZOOM = 10
+const MAX_ZOOM = 11
 const LAT_REF = 46.6
 
 /**
