@@ -267,3 +267,24 @@ CREATE TABLE IF NOT EXISTS rail_calendar (
 
 CREATE INDEX IF NOT EXISTS idx_rail_calendar_date ON rail_calendar (date);
 
+-- Vue matérialisée pré-calculant la jointure icao_noise_pattern × madb_noise_ref
+-- Utilisée par aircraft-processor pour le lookup ICAO → données de bruit
+-- Rafraîchir après make import-all : REFRESH MATERIALIZED VIEW icao_noise_resolved;
+CREATE MATERIALIZED VIEW IF NOT EXISTS icao_noise_resolved AS
+SELECT
+    p.icao_code,
+    m.flyover_epndb,
+    m.approach_epndb,
+    m.overflight_dba,
+    m.takeoff_dba,
+    m.noise_unit
+FROM icao_noise_pattern p
+JOIN madb_noise_ref m
+    ON (p.manufacturer_pattern IS NULL
+        OR m.manufacturer ILIKE p.manufacturer_pattern)
+   AND m.aircraft_model ~ p.model_pattern
+WITH NO DATA;
+
+CREATE INDEX IF NOT EXISTS idx_icao_noise_resolved_code
+    ON icao_noise_resolved (icao_code);
+

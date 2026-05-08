@@ -90,34 +90,34 @@ status:
 # --- Logs ---
 
 logs:
-	docker compose logs -f
+	docker compose logs -f --tail=50
 
 logs-aircraft-producer:
-	docker logs -f aircraft-producer
+	docker logs -f --tail=50 aircraft-producer
 
 logs-aircraft-processor:
-	docker logs -f aircraft-processor
+	docker logs -f --tail=50 aircraft-processor
 
 logs-road-producer:
-	docker compose logs -f road-producer
+	docker compose logs -f --tail=50 road-producer
 
 logs-road-processor:
-	docker compose logs -f road-processor
+	docker compose logs -f --tail=50 road-processor
 
 logs-railway-producer:
-	docker compose logs -f railway-producer
+	docker compose logs -f --tail=50 railway-producer
 
 logs-railway-processor:
-	docker compose logs -f railway-processor
+	docker compose logs -f --tail=50 railway-processor
 
 logs-kafka:
-	docker logs -f kafka
+	docker logs -f --tail=50 kafka
 
 logs-api:
-	docker logs -f noise-api
+	docker logs -f --tail=50 noise-api
 
 logs-frontend:
-	docker logs -f noise-frontend
+	docker logs -f --tail=50 noise-frontend
 
 # --- Build ---
 
@@ -295,7 +295,7 @@ import-patterns:
 	python3 aircraft-data/import_icao_patterns.py
 
 refresh-madb-view:
-	docker compose exec timescaledb psql -U $(TIMESCALE_USER) -d $(TIMESCALE_NAME) -c "REFRESH MATERIALIZED VIEW icao_to_madb_resolved;"
+	docker compose exec timescaledb psql -U $(TIMESCALE_USER) -d $(TIMESCALE_NAME) -c "REFRESH MATERIALIZED VIEW icao_noise_resolved;"
 
 import-rfn-lines:
 	docker compose run --rm \

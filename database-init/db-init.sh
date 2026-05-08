@@ -78,6 +78,12 @@ echo "[3/8] Restauration du backup ($(basename "$BACKUP_FILE"))..."
 gunzip -c "$BACKUP_FILE" | docker exec -i "$TIMESCALE_HOST" psql -U "$TIMESCALE_USER" -d "$TIMESCALE_NAME"
 echo "      Restauration terminée."
 
+echo ""
+echo "[3b/8] Peuplement de la vue matérialisée icao_noise_resolved..."
+docker exec "$TIMESCALE_HOST" psql -U "$TIMESCALE_USER" -d "$TIMESCALE_NAME" \
+  -c "REFRESH MATERIALIZED VIEW icao_noise_resolved;"
+echo "      Vue icao_noise_resolved peuplée."
+
 # ── 4. Décompression shapes ────────────────
 echo ""
 echo "[4/8] Décompression de shapes.tar.xz..."

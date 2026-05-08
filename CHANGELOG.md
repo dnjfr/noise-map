@@ -1,6 +1,10 @@
 
 # Changelog
 
+## [v1.2.8] - 2026-05-08
+- Correction d'une erreur de génération sur la vue dématérialisée 
+- Ajout de tails dans les logs pour ne garder que les cinquante dernières lignes
+
 ## [v1.2.7] - 2026-04-28
 - Mise à jour du nombre de workers dans le Dockerfile de l'API qui les faisait planter
 
