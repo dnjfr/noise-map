@@ -13,6 +13,7 @@ export interface Stats {
   road_segment_count: number
   road_avg_noise_db: number
   road_max_noise_db: number
+  road_quota_exceeded: boolean
 }
 
 export function useStats(): { stats: Stats | null; apiError: boolean } {
@@ -42,7 +43,8 @@ export function useStats(): { stats: Stats | null; apiError: boolean } {
           data.road_max_noise_db === prev.road_max_noise_db &&
           data.railway_train_count === prev.railway_train_count &&
           data.railway_avg_noise_db === prev.railway_avg_noise_db &&
-          data.railway_max_noise_db === prev.railway_max_noise_db
+          data.railway_max_noise_db === prev.railway_max_noise_db &&
+          data.road_quota_exceeded === prev.road_quota_exceeded
         ) return prev
         return data
       })

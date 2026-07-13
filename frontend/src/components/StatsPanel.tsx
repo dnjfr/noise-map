@@ -78,6 +78,11 @@ export default React.memo(function StatsPanel({ stats }: Props) {
         />
       </Section>
       <Section title="Routier">
+        {stats?.road_quota_exceeded && (
+          <div className="px-2 py-1.5 my-1 bg-amber-900/40 border border-amber-600/50 rounded text-amber-400 text-[10px] leading-tight">
+            Quota TomTom mensuel gratuit dépassé, données routières non actualisées
+          </div>
+        )}
         <StatRow
         label="Segments détectés"
         value={

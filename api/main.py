@@ -542,17 +542,28 @@ def _fetch_railway_stats(db: Session, cutoff) -> dict:
 
 
 def _fetch_road_stats(db: Session, cutoff) -> dict:
-    # Fenêtre 6 min > POLL_INTERVAL=5 min du road-producer pour éviter les trous entre cycles
+    # Fenêtre 25 min > POLL_INTERVAL=20 min du road-producer pour éviter les trous entre cycles
     r = db.query(
         func.avg(RoadNoiseLevel.noise_db).label("avg_noise"),
         func.max(RoadNoiseLevel.noise_db).label("max_noise"),
         func.count(func.distinct(RoadNoiseLevel.code_pme)).label("segment_count")
     ).filter(RoadNoiseLevel.time > cutoff).first()
 
+    quota_exceeded = False
+    try:
+        row = db.execute(text(
+            "SELECT quota_exceeded FROM service_status WHERE service_name = 'road-producer'"
+        )).fetchone()
+        if row:
+            quota_exceeded = bool(row[0])
+    except Exception:
+        pass
+
     return {
         "road_segment_count": int(r.segment_count) if r and r.segment_count else 0,
         "road_avg_noise_db": float(r.avg_noise) if r and r.avg_noise else 0.0,
         "road_max_noise_db": float(r.max_noise) if r and r.max_noise else 0.0,
+        "road_quota_exceeded": quota_exceeded,
     }
 
 
@@ -561,19 +572,19 @@ def _fetch_road_stats(db: Session, cutoff) -> dict:
 def get_stats(request: Request, db: Session = Depends(get_db)):
     """Retourne les statistiques globales de la carte pour les 3 réseaux.
 
-    Fenêtre temporelle : 2 min pour comptages/bruit, 6 min pour routes
-    (> POLL_INTERVAL=5 min), 10 min pour le top 10 zones aériennes.
+    Fenêtre temporelle : 2 min pour comptages/bruit, 25 min pour routes
+    (> POLL_INTERVAL=20 min), 10 min pour le top 10 zones aériennes.
     """
     try:
         now = datetime.utcnow()
         two_min = now - timedelta(minutes=2)
-        six_min = now - timedelta(minutes=6)
+        twenty_five_min = now - timedelta(minutes=25)
         ten_min = now - timedelta(minutes=10)
 
         return {
             **_fetch_aircraft_stats(db, two_min, ten_min),
             **_fetch_railway_stats(db, two_min),
-            **_fetch_road_stats(db, six_min),
+            **_fetch_road_stats(db, twenty_five_min),
             "timestamp": now.isoformat(),
         }
 

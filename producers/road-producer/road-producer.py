@@ -8,7 +8,7 @@ import requests
 import mapbox_vector_tile
 from shapely.geometry import shape
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from kafka import KafkaProducer
 from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
@@ -31,7 +31,86 @@ DATABASE_URL = f"postgresql+psycopg://{TIMESCALE_USER}:{TIMESCALE_PASSWORD}@{TIM
 
 TOMTOM_API_KEY = os.getenv("TOMTOM_API_KEY")
 
-POLL_INTERVAL = 300  # 5 minutes
+POLL_INTERVAL = 1200  # 20 minutes
+
+# ─── Quota TomTom ───────────────────────────────────────────────────────────
+TOMTOM_MONTHLY_QUOTA = 200_000
+TILES_PER_CYCLE = 72
+
+_quota_requests = 0
+_quota_month = None
+_quota_exceeded = False
+
+
+def _reset_quota_if_new_month(engine=None):
+    """Réinitialise le compteur de quota au changement de mois."""
+    global _quota_requests, _quota_month, _quota_exceeded
+    current_month = datetime.now(timezone.utc).strftime("%Y-%m")
+    if _quota_month != current_month:
+        _quota_requests = 0
+        _quota_exceeded = False
+        _quota_month = current_month
+        logger.info(f"[Quota] Nouveau mois ({current_month}) — compteur réinitialisé")
+        if engine:
+            _persist_quota_status(engine)
+
+
+def _mark_quota_exceeded(engine):
+    """Marque le quota comme dépassé et persiste le statut en DB."""
+    global _quota_exceeded
+    _quota_exceeded = True
+    _persist_quota_status(engine)
+    next_month = (datetime.now(timezone.utc).replace(day=1) + timedelta(days=32)).replace(day=1)
+    logger.warning(
+        f"[Quota] Quota mensuel TomTom dépassé ({_quota_requests}/{TOMTOM_MONTHLY_QUOTA}) "
+        f"— polling suspendu jusqu'au {next_month.strftime('%Y-%m-%d')}"
+    )
+
+
+def _persist_quota_status(engine):
+    """Persiste le statut du quota dans la table service_status."""
+    try:
+        with engine.begin() as conn:
+            conn.execute(text("""
+                INSERT INTO service_status (service_name, quota_used, quota_limit, quota_exceeded, updated_at)
+                VALUES ('road-producer', :used, :limit, :exceeded, NOW())
+                ON CONFLICT (service_name) DO UPDATE SET
+                    quota_used = EXCLUDED.quota_used,
+                    quota_limit = EXCLUDED.quota_limit,
+                    quota_exceeded = EXCLUDED.quota_exceeded,
+                    updated_at = EXCLUDED.updated_at
+            """), {"used": _quota_requests, "limit": TOMTOM_MONTHLY_QUOTA, "exceeded": _quota_exceeded})
+    except Exception as e:
+        logger.error(f"[Quota] Erreur persistance statut: {e}")
+
+
+def _seconds_until_next_month() -> float:
+    """Retourne le nombre de secondes jusqu'au 1er du mois suivant."""
+    now = datetime.now(timezone.utc)
+    next_month = (now.replace(day=1) + timedelta(days=32)).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    return (next_month - now).total_seconds()
+
+
+def _load_quota_from_db(engine):
+    """Restaure le compteur de quota depuis la DB (survit aux redémarrages)."""
+    global _quota_requests, _quota_exceeded, _quota_month
+    try:
+        with engine.connect() as conn:
+            row = conn.execute(text(
+                "SELECT quota_used, quota_exceeded, updated_at FROM service_status WHERE service_name = 'road-producer'"
+            )).fetchone()
+            if row:
+                db_month = row[2].strftime("%Y-%m")
+                current_month = datetime.now(timezone.utc).strftime("%Y-%m")
+                if db_month == current_month:
+                    _quota_requests = row[0]
+                    _quota_exceeded = bool(row[1])
+                    _quota_month = current_month
+                    logger.info(f"[Quota] Restauré depuis DB : {_quota_requests:,}/{TOMTOM_MONTHLY_QUOTA:,}, exceeded={_quota_exceeded}")
+                else:
+                    logger.info(f"[Quota] Données DB du mois {db_month}, mois actuel {current_month} — compteur réinitialisé")
+    except Exception as e:
+        logger.warning(f"[Quota] Impossible de charger depuis DB: {e}")
 
 
 # Filtrage géographique : ne garder que les segments en France métropolitaine + Corse.
@@ -100,7 +179,7 @@ TOMTOM_ZOOM = 8
 # Obtenues en divisant chaque tuile zoom 7 en 4 tuiles zoom 8 (2x, 2y) / (2x+1, 2y) / (2x, 2y+1) / (2x+1, 2y+1)
 # Géométrie 4× plus précise qu'au zoom 7 — élimine les routes "fantômes" causées par
 # la simplification excessive des polylines au zoom 7.
-# 72 req toutes les 5 minutes × 24h = 8 640 req/jour (quota TomTom free : 50k/jour)
+# 72 req toutes les 20 min × 24h = 5 184 req/jour ≈ 155k/mois (quota TomTom free : 200k/mois)
 TOMTOM_FRANCE_TILES = [
     # Rangée nord — ~49.0-51.0°N (Normandie, Paris-nord, Lille, Alsace-nord)
     (126, 86), (127, 86), (126, 87), (127, 87),  # ex (63,43)
@@ -284,14 +363,17 @@ def decode_vector_tile(raw: bytes, tile_x: int, tile_y: int, zoom: int) -> list[
 
 # ─── TomTom fetch + parse ────────────────────────────────────────────────────
 
-def fetch_tomtom_tile(session: requests.Session, api_key: str, zoom: int, x: int, y: int) -> bytes | None:
-    """Récupère une Vector Flow Tile TomTom en mode absolute (vitesse réelle km/h)."""
+def fetch_tomtom_tile(session: requests.Session, api_key: str, zoom: int, x: int, y: int) -> bytes | str | None:
+    """Récupère une Vector Flow Tile TomTom en mode absolute (vitesse réelle km/h).
+    Retourne bytes si OK, 'QUOTA_EXCEEDED' si 403, None si autre erreur."""
     url = (
         f"https://api.tomtom.com/traffic/map/4/tile/flow/absolute"
         f"/{zoom}/{x}/{y}.pbf?key={api_key}"
     )
     try:
         r = session.get(url, timeout=30)
+        if r.status_code == 403:
+            return "QUOTA_EXCEEDED"
         r.raise_for_status()
         return r.content
     except Exception as e:
@@ -472,6 +554,8 @@ def publish_segments(producer, segments: dict, timestamp: str, city_name: str):
 
 def _fetch_and_parse_tile(session, api_key, zoom, x, y):
     raw = fetch_tomtom_tile(session, api_key, zoom, x, y)
+    if raw == "QUOTA_EXCEEDED":
+        return x, y, "QUOTA_EXCEEDED"
     if not raw:
         return x, y, {}
     features = decode_vector_tile(raw, x, y, zoom)
@@ -481,7 +565,17 @@ def _fetch_and_parse_tile(session, api_key, zoom, x, y):
 
 
 def poll_tomtom_and_publish(producer, engine, api_key, timestamp):
+    global _quota_requests, _quota_exceeded
+
+    if _quota_exceeded:
+        return -1
+
+    if _quota_requests + TILES_PER_CYCLE > TOMTOM_MONTHLY_QUOTA:
+        _mark_quota_exceeded(engine)
+        return -1
+
     total = 0
+    forbidden_count = 0
     MAX_WORKERS = 10
     with requests.Session() as session:
         with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
@@ -498,11 +592,27 @@ def poll_tomtom_and_publish(producer, engine, api_key, timestamp):
                 except Exception as e:
                     logger.error(f"[TomTom] Erreur tuile ({x},{y}): {e}")
                     continue
+                if segments == "QUOTA_EXCEEDED":
+                    forbidden_count += 1
+                    continue
                 if segments:
                     upsert_segments(engine, segments)
                     publish_segments(producer, segments, timestamp, "France")
                     total += len(segments)
                     logger.info(f"[TomTom] {done}/{len(TOMTOM_FRANCE_TILES)} tuiles — {len(segments)} segments insérés ({x},{y})")
+
+    _quota_requests += TILES_PER_CYCLE
+    pct = _quota_requests / TOMTOM_MONTHLY_QUOTA * 100
+    logger.info(f"[Quota] Requêtes mensuelles : {_quota_requests:,} / {TOMTOM_MONTHLY_QUOTA:,} ({pct:.1f}%)")
+    _persist_quota_status(engine)
+
+    # 403 sur la majorité des tuiles (>90%) = quota réellement dépassé
+    if forbidden_count > TILES_PER_CYCLE * 0.9:
+        logger.warning(f"[Quota] {forbidden_count}/{TILES_PER_CYCLE} tuiles en 403 — quota probablement dépassé")
+        _mark_quota_exceeded(engine)
+        return -1
+    elif forbidden_count > 0:
+        logger.warning(f"[TomTom] {forbidden_count} tuile(s) en 403 (erreur passagère probable)")
 
     if total == 0:
         logger.warning("[TomTom] Aucun segment extrait sur les 72 tuiles")
@@ -514,20 +624,32 @@ def poll_tomtom_and_publish(producer, engine, api_key, timestamp):
 # ─── Main loop ───────────────────────────────────────────────────────────────
 
 def main():
-    logger.info(f"Démarrage du road-producer (TomTom {len(TOMTOM_FRANCE_TILES)} tuiles zoom {TOMTOM_ZOOM}, 1h polling)")
+    logger.info(f"Démarrage du road-producer (TomTom {len(TOMTOM_FRANCE_TILES)} tuiles zoom {TOMTOM_ZOOM}, polling {POLL_INTERVAL//60}min)")
     time.sleep(10)
 
     engine   = create_db_engine()
+    _load_quota_from_db(engine)
     producer = create_kafka_producer()
     last_poll = None
 
     try:
         while True:
+            _reset_quota_if_new_month(engine)
+
+            if _quota_exceeded:
+                wait = _seconds_until_next_month()
+                next_month = (datetime.now(timezone.utc).replace(day=1) + timedelta(days=32)).replace(day=1)
+                logger.info(
+                    f"[Quota] Quota dépassé — en attente jusqu'au {next_month.strftime('%Y-%m-%d')}  "
+                    f"({wait/3600:.0f}h restantes)"
+                )
+                time.sleep(min(wait, 3600))
+                continue
+
             now = time.monotonic()
             if last_poll is None or (now - last_poll) >= POLL_INTERVAL:
                 timestamp = datetime.now(timezone.utc).isoformat()
 
-                # TomTom — 1 tuile, 1 requête
                 if TOMTOM_API_KEY:
                     poll_tomtom_and_publish(producer, engine, TOMTOM_API_KEY, timestamp)
                 else:

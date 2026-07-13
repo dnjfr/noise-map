@@ -70,6 +70,15 @@ CALL add_columnstore_policy('aircraft_noise_levels', INTERVAL '12 hours');
 SELECT add_retention_policy('aircraft_noise_levels', INTERVAL '3 days', if_not_exists => TRUE);
 
 
+-- ─── Statut des services (quota, santé) ──────────────────────────────────
+CREATE TABLE IF NOT EXISTS service_status (
+    service_name   TEXT PRIMARY KEY,
+    quota_used     INTEGER DEFAULT 0,
+    quota_limit    INTEGER DEFAULT 0,
+    quota_exceeded BOOLEAN DEFAULT FALSE,
+    updated_at     TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- ─── Pipeline routier (TomTom) ────────────────────────────────────
 
 -- Référentiel statique des segments routiers (rempli au démarrage du road-producer)
