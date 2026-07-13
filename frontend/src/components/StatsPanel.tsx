@@ -78,41 +78,46 @@ export default React.memo(function StatsPanel({ stats }: Props) {
         />
       </Section>
       <Section title="Routier">
-        {stats?.road_quota_exceeded && (
-          <div className="px-2 py-1.5 my-1 bg-amber-900/40 border border-amber-600/50 rounded text-amber-400 text-[10px] leading-tight">
-            Quota TomTom mensuel gratuit dépassé, données routières non actualisées
+        {stats?.road_quota_exceeded ? (
+          <div className="py-1.5">
+            <span className="text-slate-400 text-xs">
+              Quota TomTom mensuel gratuit dépassé, données routières non actualisées
+            </span>
           </div>
+        ) : (
+          <>
+            <StatRow
+            label="Segments détectés"
+            value={
+                isLoading
+                ? <span className="animate-pulse text-slate-500">...</span>
+                : String(stats?.road_segment_count ?? '-')
+            }
+            />
+
+            <StatRow
+            label="Bruit moyen"
+            value={
+                isLoading
+                ? <span className="animate-pulse text-slate-500">...</span>
+                : stats?.road_avg_noise_db != null
+                    ? `${stats.road_avg_noise_db.toFixed(1)} dB`
+                    : '-'
+            }
+            />
+
+            <StatRow
+            label="Bruit maximum"
+            value={
+                isLoading
+                ? <span className="animate-pulse text-slate-500">...</span>
+                : stats?.road_max_noise_db != null
+                    ? `${stats.road_max_noise_db.toFixed(1)} dB`
+                    : '-'
+            }
+            />
+          </>
         )}
-        <StatRow
-        label="Segments détectés"
-        value={
-            isLoading
-            ? <span className="animate-pulse text-slate-500">...</span>
-            : String(stats?.road_segment_count ?? '-')
-        }
-        />
-
-        <StatRow
-        label="Bruit moyen"
-        value={
-            isLoading
-            ? <span className="animate-pulse text-slate-500">...</span>
-            : stats?.road_avg_noise_db != null
-                ? `${stats.road_avg_noise_db.toFixed(1)} dB`
-                : '-'
-        }
-        />
-
-        <StatRow
-        label="Bruit maximum"
-        value={
-            isLoading
-            ? <span className="animate-pulse text-slate-500">...</span>
-            : stats?.road_max_noise_db != null
-                ? `${stats.road_max_noise_db.toFixed(1)} dB`
-                : '-'
-        }
-        />
       </Section>
     </div>
   )
